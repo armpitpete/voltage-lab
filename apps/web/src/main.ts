@@ -1,0 +1,5 @@
+import '../../../packages/ui/src/tokens.css';import'./styles.css';import{mountSampleHold}from'./sample-hold';
+const root=document.querySelector<HTMLDivElement>('#app');if(!root)throw new Error('Missing app root');
+root.innerHTML=`<header class="suite-header"><div><p class="eyebrow">Interactive modular synthesis curriculum</p><h1>Voltage Lab</h1><p>Small visual and audible laboratories for understanding voltage, timing and sound.</p></div><nav aria-label="Laboratories"><a href="#/sample-and-hold" class="active">Sample & Hold</a><span>Clock · planned</span><span>Quantizer · planned</span><span>Envelope · planned</span></nav></header><main id="module"></main><footer>Voltage Lab · one concept at a time</footer>`;
+const moduleRoot=document.querySelector<HTMLElement>('#module');if(!moduleRoot)throw new Error('Missing module root');
+function route(){const path=location.hash||'#/sample-and-hold';if(path==='#/sample-and-hold')mountSampleHold(moduleRoot);else moduleRoot.innerHTML='<section class="empty panel"><h2>Module not found</h2><a href="#/sample-and-hold">Open Sample & Hold</a></section>'}window.addEventListener('hashchange',route);route();

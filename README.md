@@ -1,59 +1,31 @@
 # Voltage Lab
 
-Voltage Lab is a suite of focused, interactive laboratories for learning modular synthesis and control voltage.
+Voltage Lab is a suite of small visual and audible laboratories for learning control voltage and modular synthesis one concept at a time.
 
-Each lab teaches one concept through visible signals, audible behaviour, guided experiments and plain-language explanations.
+## Current module
 
-## Product principles
+- **Sample & Hold Lab** — migrated as the first module with Sample & Hold, Track & Hold, Companion Hold, exact 1 V/octave audio, selectable references, semitone quantization, three-voice mute/solo, slow motion, stepping and oscilloscope cursors.
 
-- One concept per laboratory.
-- Voltage and timing remain visible.
-- Audio demonstrates the same signal being shown.
-- Controls must work with mouse, touch and keyboard.
-- No lesson depends on hover, right-click, tiny handles or precision dragging.
-- Shared tools and terminology stay consistent across every module.
-- The suite is educational software, not a general-purpose modular synthesiser.
-
-## Planned laboratories
-
-1. Sample & Hold
-2. Clock
-3. Quantizer
-4. LFO
-5. Envelope
-6. Attenuverter and offset
-7. Comparator
-8. Logic
-9. Sequencer
-10. Oscillator
-11. VCA
-12. Filter
-
-## Intended repository structure
+## Architecture
 
 ```text
-apps/
-  web/                 Suite shell, navigation and curriculum
-  sample-hold/         First migrated laboratory
-  clock/
-  quantizer/
-  lfo/
-  envelope/
-
-packages/
-  ui/                  Shared accessible controls and layout
-  cv-model/            Voltage, pitch and quantization functions
-  audio/               Safe Web Audio helpers
-  scope/               Oscilloscope and measurement tools
-  timeline/            Clock, gate and trigger displays
-  lessons/             Guided experiment contracts
-
-curriculum/             Learning order and terminology
-docs/                   Architecture, design and contribution rules
+apps/web/                 suite shell and routed modules
+packages/cv-model/        deterministic voltage and pitch behaviour
+packages/audio-safety/    shared browser-audio lifecycle and shutdown
+packages/lessons/         reusable guided lesson contracts
+packages/ui/              shared visual tokens
 ```
 
-## Current protected boundary
+No second module begins until Sample & Hold parity is validated in this shared architecture.
 
-The existing `armpitpete/sample-hold-lab` repository remains the live production source until its behaviour is reproduced and independently validated inside this monorepo.
+## Development
 
-No redirect, archive or shutdown of the existing app is authorised by this foundation commit.
+```bash
+npm install
+npm run dev
+npm run check
+```
+
+## Migration safety
+
+The standalone `armpitpete/sample-hold-lab` deployment remains available until this suite deployment receives visual and audio acceptance. It is not deleted or redirected by this foundation release.
