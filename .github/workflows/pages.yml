@@ -20,14 +20,14 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm run check
-      - if: github.event_name == 'push' && github.event.repository.visibility == 'public'
+      - if: github.event_name == 'push'
         uses: actions/configure-pages@v5
-      - if: github.event_name == 'push' && github.event.repository.visibility == 'public'
+      - if: github.event_name == 'push'
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
   deploy:
-    if: github.event_name == 'push' && github.event.repository.visibility == 'public'
+    if: github.event_name == 'push'
     needs: validate
     environment:
       name: github-pages
