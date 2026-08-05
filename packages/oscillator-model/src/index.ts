@@ -7,4 +7,6 @@ export function waveformSample(type:Waveform,phase:number,pulseWidth=.5){const p
 export function outputVoltage(sample:number,amplitude:number,offset:number){return sample*amplitude+offset}
 export function peakToPeak(amplitude:number){return Math.abs(amplitude)*2}
 export function harmonicAmplitudes(type:Waveform,count=16,pulseWidth=.5){return Array.from({length:count},(_,i)=>{const n=i+1;if(type==='sine')return n===1?1:0;if(type==='saw')return 1/n;if(type==='triangle')return n%2?1/(n*n):0;if(type==='square')return n%2?1/n:0;return Math.abs(2*Math.sin(Math.PI*n*clamp(pulseWidth,.05,.95))/(Math.PI*n))})}
+export function webAudioWaveform(type:Waveform):OscillatorType|'periodic'{return type==='saw'?'sawtooth':type==='pulse'?'periodic':type}
+export function pulseWaveCoefficients(pulseWidth:number,harmonics=64){const width=clamp(pulseWidth,.05,.95),real=new Float32Array(harmonics+1),imag=new Float32Array(harmonics+1);for(let n=1;n<=harmonics;n++){real[n]=2*Math.sin(2*Math.PI*n*width)/(Math.PI*n);imag[n]=2*(1-Math.cos(2*Math.PI*n*width))/(Math.PI*n)}return{real,imag}}
 export function frequencyToNoteName(frequency:number){const midi=Math.round(69+12*Math.log2(frequency/440));const names=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];return`${names[(midi%12+12)%12]}${Math.floor(midi/12)-1}`}
