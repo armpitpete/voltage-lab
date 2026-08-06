@@ -3,11 +3,12 @@ import './styles.css';
 import { mountSampleHold } from './sample-hold';
 import { mountClockTrigger } from './clock-trigger';
 import { mountOscillator } from './oscillator';
+import { mountQuantizer } from './quantizer';
 
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('Missing app root');
 
-root.innerHTML = `<header class="suite-header"><div><p class="eyebrow">Interactive modular synthesis curriculum</p><h1>Voltage Lab</h1><p>Small visual and audible laboratories for understanding voltage, timing and sound.</p></div><nav aria-label="Laboratories"><a href="#/sample-and-hold" data-route="sample">Sample & Hold</a><a href="#/clock-and-trigger" data-route="clock">Clock & Trigger</a><a href="#/oscillator" data-route="oscillator">Oscillator</a><span>Quantizer · planned</span><span>Envelope · planned</span></nav></header><main id="module"></main><footer>Voltage Lab · one concept at a time</footer>`;
+root.innerHTML = `<header class="suite-header"><div><p class="eyebrow">Interactive modular synthesis curriculum</p><h1>Voltage Lab</h1><p>Small visual and audible laboratories for understanding voltage, timing and sound.</p></div><nav aria-label="Laboratories"><a href="#/sample-and-hold" data-route="sample">Sample & Hold</a><a href="#/clock-and-trigger" data-route="clock">Clock & Trigger</a><a href="#/oscillator" data-route="oscillator">Oscillator</a><a href="#/quantizer" data-route="quantizer">Quantizer</a><span>Envelope · planned</span></nav></header><main id="module"></main><footer>Voltage Lab · one concept at a time</footer>`;
 
 const moduleRoot = document.querySelector<HTMLElement>('#module');
 if (!moduleRoot) throw new Error('Missing module root');
@@ -31,6 +32,9 @@ function route() {
   } else if (path === '#/oscillator') {
     root.querySelector('[data-route=oscillator]')?.classList.add('active');
     keep(mountOscillator(moduleRoot));
+  } else if (path === '#/quantizer') {
+    root.querySelector('[data-route=quantizer]')?.classList.add('active');
+    keep(mountQuantizer(moduleRoot));
   } else {
     moduleRoot.innerHTML = '<section class="empty panel"><h2>Module not found</h2><a href="#/sample-and-hold">Open Sample & Hold</a></section>';
   }
