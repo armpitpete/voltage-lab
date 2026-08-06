@@ -1,5 +1,6 @@
 import '../../../packages/ui/src/tokens.css';
 import './styles.css';
+import './filter.css';
 import { mountSampleHold } from './sample-hold';
 import { mountClockTrigger } from './clock-trigger';
 import { mountOscillator } from './oscillator';
