@@ -10,6 +10,7 @@ Voltage Lab is a suite of small visual and audible laboratories for learning con
 - **Quantizer Lab** — turn continuous CV into exact notes and scales using live or trigger-held quantization, stepped voltage history and audible comparison.
 - **Envelope Lab** — shape a 0–5 V ADSR signal from gates and triggers, then route it to loudness, filter brightness or pitch.
 - **Patch Lab** — combine clock, sequencer CV, scale quantization, oscillator and ADSR-controlled loudness into the first complete playable patch.
+- **Filter Lab** — reshape oscillator harmonics with low-pass, high-pass, band-pass and notch responses, exact 1 V/octave cutoff CV, resonance, LFO and ADSR modulation.
 
 ## Architecture
 
@@ -21,6 +22,7 @@ packages/oscillator-model/   deterministic oscillator and modulation behaviour
 packages/quantizer-model/    deterministic notes, scales and quantization behaviour
 packages/envelope-model/     deterministic ADSR stage and retrigger behaviour
 packages/patch-model/        deterministic sequencer transport and complete patch routing
+packages/filter-model/       deterministic filter response, cutoff CV and harmonic behaviour
 packages/audio-safety/       shared browser-audio lifecycle and shutdown
 packages/lessons/            reusable guided lesson contracts
 packages/ui/                 shared visual tokens
