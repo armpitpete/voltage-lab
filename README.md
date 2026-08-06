@@ -12,6 +12,7 @@ Voltage Lab is a suite of small visual and audible laboratories for learning con
 - **Patch Lab** — combine clock, sequencer CV, scale quantization, oscillator and ADSR-controlled loudness into the first complete playable patch.
 - **Filter Lab** — reshape oscillator harmonics with low-pass, high-pass, band-pass and notch responses, exact 1 V/octave cutoff CV, resonance, LFO and ADSR modulation.
 - **VCA & Mixer Lab** — turn 0–5 V control signals into linear or exponential gain, then mix, pan, invert, cancel and clip three oscillator channels.
+- **LFO & Modulation Lab** — shape a periodic bipolar voltage, adjust phase and offset, then route independently inverted copies to pitch, cutoff, loudness and pan.
 
 ## Architecture
 
@@ -25,6 +26,7 @@ packages/envelope-model/     deterministic ADSR stage and retrigger behaviour
 packages/patch-model/        deterministic sequencer transport and complete patch routing
 packages/filter-model/       deterministic filter response, cutoff CV and harmonic behaviour
 packages/vca-mixer-model/    deterministic amplitude, stereo summing, headroom and clipping
+packages/lfo-modulation-model/ deterministic periodic voltage, phase and destination routing
 packages/audio-safety/       shared browser-audio lifecycle and shutdown
 packages/lessons/            reusable guided lesson contracts
 packages/ui/                 shared visual tokens
