@@ -11,7 +11,7 @@ import { mountEnvelope } from './envelope';
 import { mountPatch } from './patch';
 import { mountFilter } from './filter';
 import { mountVcaMixer } from './vca-mixer';
-import { mountLfoModulation } from './lfo-modulation';
+import { mountLfoModulationWithOscillatorVisual } from './lfo-modulation-with-oscillator-visual';
 
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('Missing app root');
@@ -57,7 +57,7 @@ function route() {
     keep(mountVcaMixer(moduleRoot));
   } else if (path === '#/lfo-modulation') {
     root.querySelector('[data-route=lfo-modulation]')?.classList.add('active');
-    keep(mountLfoModulation(moduleRoot));
+    keep(mountLfoModulationWithOscillatorVisual(moduleRoot));
   } else {
     moduleRoot.innerHTML = '<section class="empty panel"><h2>Module not found</h2><a href="#/sample-and-hold">Open Sample & Hold</a></section>';
   }
