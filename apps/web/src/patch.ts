@@ -42,8 +42,6 @@ type HistoryPoint = {
   rawVoltage: number;
   quantizedVoltage: number;
   envelopeVoltage: number;
-  gate: boolean;
-  step: number;
 };
 
 export function mountPatch(root: HTMLElement) {
@@ -52,7 +50,7 @@ export function mountPatch(root: HTMLElement) {
     .map(([value, label]) => `<option value="${value}">${label}</option>`)
     .join('');
 
-  root.innerHTML = `<section class="module-header"><div><p class="eyebrow">Module 06 · complete signal chain</p><h2>Patch Lab</h2><p>Build and play the first complete patch: clock → sequence → quantizer → oscillator → envelope → audio.</p></div><div><button id="learnTab" class="active">Learn</button> <button id="exploreTab">Explore</button></div></section><section id="lesson" class="lesson panel"><div><span id="lessonCount"></span><h3 id="lessonTitle"></h3><p id="lessonText"></p></div><div><button id="prev">Previous</button> <button id="next">Next experiment</button></div></section><section class="lab-grid patch-lab-grid"><aside class="controls panel"><h3>Transport</h3><label>Tempo<input id="bpm" type="range" min="30" max="240" step="1" value="100"><output id="bpmOut"></output></label><label>Step rate<select id="rate"><option value="1">Quarter notes</option><option value="2" selected>Eighth notes</option><option value="4">Sixteenth notes</option></select></label><label>Gate length<input id="gatePercent" type="range" min="10" max="95" step="1" value="55"><output id="gatePercentOut"></output></label><div class="button-row"><button id="transport" class="primary">Start transport</button><button id="resetTransport">Reset to step 1</button><button id="manualStep">Next step</button><button id="randomise">Rotate sequence</button></div><h3>Sequence and quantizer</h3><label>Preset<select id="preset"><option value="ascending">Ascending voltage</option><option value="minorPulse">Minor pulse</option><option value="octaveRests">Octaves and rests</option></select></label><label>Root note<select id="rootNote">${rootOptions}</select></label><label>Scale<select id="scale">${scaleOptions}</select></label><h3>Oscillator</h3><label>Waveform<select id="waveform"><option value="sawtooth">Saw</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sine">Sine</option></select></label><label>Octave<select id="octave"><option value="-2">−2 octaves</option><option value="-1">−1 octave</option><option value="0" selected>Normal</option><option value="1">+1 octave</option><option value="2">+2 octaves</option></select></label><label>Fine tuning<input id="tuning" type="range" min="-100" max="100" step="1" value="0"><output id="tuningOut"></output></label><h3>Amplitude envelope</h3><label>Attack<input id="attack" type="range" min="0" max="1000" step="10" value="35"><output id="attackOut"></output></label><label>Decay<input id="decay" type="range" min="0" max="1000" step="10" value="180"><output id="decayOut"></output></label><label>Sustain<input id="sustain" type="range" min="0" max="1" step=".01" value=".55"><output id="sustainOut"></output></label><label>Release<input id="release" type="range" min="0" max="2000" step="10" value="240"><output id="releaseOut"></output></label><h3>Audio</h3><label>Volume<input id="volume" type="range" min="0" max=".12" step=".005" value=".04"><output id="volumeOut"></output></label><div class="button-row"><button id="audioStart" class="primary">Start audio</button><button id="audioMute">Mute</button><button id="audioStop">Panic / stop</button></div></aside><main class="workbench"><section class="panel patch-sequence"><div class="scope-heading"><div><p class="eyebrow">Editable eight-step voltage sequence</p><h3>Raw CV, quantized notes and gates</h3></div><div class="readouts"><span>Current step<b id="stepReadout">1</b></span><span>Raw CV<b id="rawReadout">0.00 V</b></span><span>Quantized CV<b id="quantizedReadout">0.00 V</b></span><span>Note<b id="noteReadout">C4</b></span><span>Frequency<b id="frequencyReadout">261.6 Hz</b></span><span>Gate<b id="gateReadout">Low</b></span><span>Envelope<b id="envelopeReadout">0.00 V</b></span></div></div><div id="stepEditors" class="patch-step-editors"></div></section><section class="scope panel"><div class="scope-heading"><div><p class="eyebrow">Stationary sequence overview</p><h3>Eight voltages before and after quantization</h3></div><div class="scope-legend"><span class="raw-key">Blue: raw sequence CV</span><span class="quantized-key">Gold: quantized CV</span><span>Cross: rest</span></div></div><canvas id="sequenceCanvas" width="1100" height="330"></canvas></section><section class="panel patch-flow-panel"><p class="eyebrow">Live patch cable path</p><h3>One event moving through six modules</h3><div class="patch-flow" id="patchFlow"><div data-node="clock"><small>1 · Clock</small><b id="flowClock">Stopped</b></div><span>→</span><div data-node="sequence"><small>2 · Sequencer</small><b id="flowSequence">Step 1 · 0.00 V</b></div><span>→</span><div data-node="quantizer"><small>3 · Quantizer</small><b id="flowQuantizer">C4 · 0.00 V</b></div><span>→</span><div data-node="oscillator"><small>4 · Oscillator</small><b id="flowOscillator">261.6 Hz</b></div><span>→</span><div data-node="envelope"><small>5 · Envelope / VCA</small><b id="flowEnvelope">Idle · 0.00 V</b></div><span>→</span><div data-node="audio"><small>6 · Audio</small><b id="flowAudio">Stopped</b></div></div></section><section class="scope panel"><div class="scope-heading"><div><p class="eyebrow">Live output history</p><h3>Pitch voltage and amplitude envelope</h3></div><div class="readouts"><span>Transport<b id="transportReadout">Stopped</b></span><span>Audio<b id="audioReadout">Stopped</b></span></div></div><canvas id="historyCanvas" width="1100" height="390"></canvas><p class="scope-legend"><span class="raw-key">Upper blue: raw CV</span><span class="quantized-key">Upper gold: quantized CV</span><span class="envelope-key">Lower green: envelope</span></p></section><section class="explanation panel"><p class="eyebrow">What is happening?</p><h3 id="explainTitle">The patch is stopped</h3><p id="explainText">Start the transport to send the first sequence voltage through the complete patch.</p></section></main></section>`;
+  root.innerHTML = `<section class="module-header"><div><p class="eyebrow">Module 06 · complete signal chain</p><h2>Patch Lab</h2><p>Build and play the first complete patch: clock → sequence → quantizer → oscillator → envelope → audio.</p></div><div><button id="learnTab" class="active">Learn</button> <button id="exploreTab">Explore</button></div></section><section id="lesson" class="lesson panel"><div><span id="lessonCount"></span><h3 id="lessonTitle"></h3><p id="lessonText"></p></div><div><button id="prev">Previous</button> <button id="next">Next experiment</button></div></section><section class="lab-grid patch-lab-grid"><aside class="controls panel"><h3>Transport</h3><label>Tempo<input id="bpm" type="range" min="30" max="240" step="1" value="100"><output id="bpmOut"></output></label><label>Step rate<select id="rate"><option value="1">Quarter notes</option><option value="2" selected>Eighth notes</option><option value="4">Sixteenth notes</option></select></label><label>Gate length<input id="gatePercent" type="range" min="10" max="95" step="1" value="55"><output id="gatePercentOut"></output></label><div class="button-row"><button id="transport" class="primary">Start transport</button><button id="resetTransport">Reset to step 1</button><button id="manualStep">Next step</button><button id="rotateSequence">Rotate sequence</button></div><h3>Sequence and quantizer</h3><label>Preset<select id="preset"><option value="ascending">Ascending voltage</option><option value="minorPulse">Minor pulse</option><option value="octaveRests">Octaves and rests</option></select></label><label>Root note<select id="rootNote">${rootOptions}</select></label><label>Scale<select id="scale">${scaleOptions}</select></label><h3>Oscillator</h3><label>Waveform<select id="waveform"><option value="sawtooth">Saw</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sine">Sine</option></select></label><label>Octave<select id="octave"><option value="-2">−2 octaves</option><option value="-1">−1 octave</option><option value="0" selected>Normal</option><option value="1">+1 octave</option><option value="2">+2 octaves</option></select></label><label>Fine tuning<input id="tuning" type="range" min="-100" max="100" step="1" value="0"><output id="tuningOut"></output></label><h3>Amplitude envelope</h3><label>Attack<input id="attack" type="range" min="0" max="1000" step="10" value="35"><output id="attackOut"></output></label><label>Decay<input id="decay" type="range" min="0" max="1000" step="10" value="180"><output id="decayOut"></output></label><label>Sustain<input id="sustain" type="range" min="0" max="1" step=".01" value=".55"><output id="sustainOut"></output></label><label>Release<input id="release" type="range" min="0" max="2000" step="10" value="240"><output id="releaseOut"></output></label><h3>Audio</h3><label>Volume<input id="volume" type="range" min="0" max=".12" step=".005" value=".04"><output id="volumeOut"></output></label><div class="button-row"><button id="audioStart" class="primary">Start audio</button><button id="audioMute">Mute</button><button id="audioStop">Panic / stop</button></div></aside><main class="workbench"><section class="panel patch-sequence"><div class="scope-heading"><div><p class="eyebrow">Editable eight-step voltage sequence</p><h3>Raw CV, quantized notes and gates</h3></div><div class="readouts"><span>Current step<b id="stepReadout">1</b></span><span>Raw CV<b id="rawReadout">0.00 V</b></span><span>Quantized CV<b id="quantizedReadout">0.00 V</b></span><span>Note<b id="noteReadout">C4</b></span><span>Frequency<b id="frequencyReadout">261.6 Hz</b></span><span>Gate<b id="gateReadout">Low</b></span><span>Envelope<b id="envelopeReadout">0.00 V</b></span></div></div><div id="stepEditors" class="patch-step-editors"></div></section><section class="scope panel"><div class="scope-heading"><div><p class="eyebrow">Stationary sequence overview</p><h3>Eight voltages before and after quantization</h3></div><div class="scope-legend"><span class="raw-key">Blue: raw sequence CV</span><span class="quantized-key">Gold: quantized CV</span><span>Cross: rest</span></div></div><canvas id="sequenceCanvas" width="1100" height="330"></canvas></section><section class="panel patch-flow-panel"><p class="eyebrow">Live patch cable path</p><h3>One event moving through six modules</h3><div class="patch-flow"><div data-node="clock"><small>1 · Clock</small><b id="flowClock">Stopped</b></div><span>→</span><div data-node="sequence"><small>2 · Sequencer</small><b id="flowSequence">Step 1 · 0.00 V</b></div><span>→</span><div data-node="quantizer"><small>3 · Quantizer</small><b id="flowQuantizer">C4 · 0.00 V</b></div><span>→</span><div data-node="oscillator"><small>4 · Oscillator</small><b id="flowOscillator">261.6 Hz</b></div><span>→</span><div data-node="envelope"><small>5 · Envelope / VCA</small><b id="flowEnvelope">Idle · 0.00 V</b></div><span>→</span><div data-node="audio"><small>6 · Audio</small><b id="flowAudio">Stopped</b></div></div></section><section class="scope panel"><div class="scope-heading"><div><p class="eyebrow">Live output history</p><h3>Pitch voltage and amplitude envelope</h3></div><div class="readouts"><span>Transport<b id="transportReadout">Stopped</b></span><span>Audio<b id="audioReadout">Stopped</b></span></div></div><canvas id="historyCanvas" width="1100" height="390"></canvas><p class="scope-legend"><span class="raw-key">Upper blue: raw CV</span><span class="quantized-key">Upper gold: quantized CV</span><span class="envelope-key">Lower green: envelope</span></p></section><section class="explanation panel"><p class="eyebrow">What is happening?</p><h3 id="explainTitle">The patch is stopped</h3><p id="explainText">Start the transport to send the first sequence voltage through the complete patch.</p></section></main></section>`;
 
   const $ = <T extends Element>(selector: string) => {
     const element = root.querySelector<T>(selector);
@@ -124,6 +122,23 @@ export function mountPatch(root: HTMLElement) {
     return patchSnapshotAt(sequence, running, heldIndex, transportStartedAt, now, patchSettings());
   }
 
+  function holdAudioParam(parameter: AudioParam, atTime: number) {
+    if (typeof parameter.cancelAndHoldAtTime === 'function') {
+      parameter.cancelAndHoldAtTime(atTime);
+      return;
+    }
+    const value = parameter.value;
+    parameter.cancelScheduledValues(atTime);
+    parameter.setValueAtTime(value, atTime);
+  }
+
+  function refreshCurrentStepPitch(index: number) {
+    const live = snapshotAt();
+    if (live.index !== index || !audio || !oscillatorNode) return;
+    const updated = patchStepSnapshot(sequence, index, patchSettings(), live.stepElapsedMs);
+    oscillatorNode.frequency.setTargetAtTime(updated.frequencyHz, audio.currentTime, .01);
+  }
+
   function renderStepEditors() {
     $('#stepEditors').innerHTML = sequence.map((step, index) => {
       const snapshot = patchStepSnapshot(sequence, index, patchSettings());
@@ -136,6 +151,7 @@ export function mountPatch(root: HTMLElement) {
         sequence[index].voltage = Number(input.value);
         updateStepLabels();
         drawSequence();
+        refreshCurrentStepPitch(index);
       });
     });
 
@@ -145,6 +161,7 @@ export function mountPatch(root: HTMLElement) {
         sequence[index].gate = input.checked;
         updateStepLabels();
         drawSequence();
+        if (snapshotAt().index === index) currentIndex = -1;
       });
     });
   }
@@ -161,8 +178,7 @@ export function mountPatch(root: HTMLElement) {
 
   function preserveTransportPosition() {
     const now = performance.now();
-    const snapshot = snapshotAt(now);
-    heldIndex = snapshot.index;
+    heldIndex = currentIndex >= 0 ? currentIndex : snapshotAt(now).index;
     transportStartedAt = now;
     currentIndex = -1;
   }
@@ -204,8 +220,11 @@ export function mountPatch(root: HTMLElement) {
   }
 
   function applyPreset(name: SequencePresetName) {
+    rootNote.value = '0';
+    scale.value = name === 'minorPulse' ? 'minor' : name === 'octaveRests' ? 'chromatic' : 'major';
     sequence = clonePreset(name);
     renderStepEditors();
+    updateControlReadouts();
     drawSequence();
     resetTransport();
   }
@@ -216,7 +235,7 @@ export function mountPatch(root: HTMLElement) {
 
   function releaseEnvelope(now: number) {
     if (envelopeState.gate) envelopeState = gateEnvelopeOff(envelopeState, envelopeSettings(), now);
-    releaseAudio(now);
+    releaseAudio();
   }
 
   function handleStepStart(snapshot: PatchStepSnapshot, now: number) {
@@ -236,6 +255,7 @@ export function mountPatch(root: HTMLElement) {
   async function startAudio() {
     if (audio) {
       await audio.resume();
+      currentIndex = -1;
       return;
     }
     audio = new AudioContext();
@@ -248,6 +268,7 @@ export function mountPatch(root: HTMLElement) {
     masterNode.gain.value = muted ? 0 : 1;
     oscillatorNode.connect(vcaNode).connect(masterNode).connect(audio.destination);
     oscillatorNode.start();
+    currentIndex = -1;
   }
 
   function playAudioStep(snapshot: PatchStepSnapshot) {
@@ -261,20 +282,18 @@ export function mountPatch(root: HTMLElement) {
     oscillatorNode.type = waveform.value as OscillatorType;
     oscillatorNode.frequency.cancelScheduledValues(now);
     oscillatorNode.frequency.setValueAtTime(snapshot.frequencyHz, now);
-    gain.cancelScheduledValues(now);
-    gain.setValueAtTime(Math.max(0, gain.value), now);
+    holdAudioParam(gain, now);
     gain.linearRampToValueAtTime(peak, now + Math.max(.001, settings.attackMs / 1000));
     gain.linearRampToValueAtTime(sustainGain, now + Math.max(.002, (settings.attackMs + settings.decayMs) / 1000));
-    gain.cancelAndHoldAtTime(gateOff);
+    holdAudioParam(gain, gateOff);
     gain.linearRampToValueAtTime(0, gateOff + Math.max(.001, settings.releaseMs / 1000));
   }
 
-  function releaseAudio(_nowMs: number) {
+  function releaseAudio() {
     if (!audio || !vcaNode) return;
     const now = audio.currentTime;
-    const releaseSeconds = Math.max(.001, Number(release.value) / 1000);
-    vcaNode.gain.cancelAndHoldAtTime(now);
-    vcaNode.gain.linearRampToValueAtTime(0, now + releaseSeconds);
+    holdAudioParam(vcaNode.gain, now);
+    vcaNode.gain.linearRampToValueAtTime(0, now + Math.max(.001, Number(release.value) / 1000));
   }
 
   function toggleMute() {
@@ -366,14 +385,14 @@ export function mountPatch(root: HTMLElement) {
     $('#lessonCount').textContent = `${lessonIndex + 1} of ${lessons.length}`;
     $('#lessonTitle').textContent = lesson[0];
     $('#lessonText').textContent = lesson[1];
-    ($<HTMLButtonElement>('#prev')).disabled = lessonIndex === 0;
-    ($<HTMLButtonElement>('#next')).textContent = lessonIndex === lessons.length - 1 ? 'Start again' : 'Next experiment';
+    $<HTMLButtonElement>('#prev').disabled = lessonIndex === 0;
+    $<HTMLButtonElement>('#next').textContent = lessonIndex === lessons.length - 1 ? 'Start again' : 'Next experiment';
   }
 
   function updateButtons() {
     transportButton.textContent = running ? 'Stop transport' : 'Start transport';
     transportButton.classList.toggle('on', running);
-    $('#audioMute').textContent = muted ? 'Unmute' : 'Mute';
+    $<HTMLButtonElement>('#audioMute').textContent = muted ? 'Unmute' : 'Mute';
   }
 
   function updateControlReadouts() {
@@ -387,15 +406,16 @@ export function mountPatch(root: HTMLElement) {
     $('#volumeOut').textContent = `${Math.round(Number(volume.value) / .12 * 100)}%`;
   }
 
-  function updateFlow(snapshot: PatchStepSnapshot, envelopeVoltage: number) {
+  function updateFlow(snapshot: PatchStepSnapshot, envelopeVoltage: number, now: number) {
     $('#flowClock').textContent = running ? `${bpm.value} BPM · ${rate.options[rate.selectedIndex].text}` : 'Stopped';
     $('#flowSequence').textContent = `Step ${snapshot.index + 1} · ${snapshot.rawVoltage.toFixed(2)} V`;
     $('#flowQuantizer').textContent = `${snapshot.note} · ${snapshot.quantizedVoltage.toFixed(3)} V`;
     $('#flowOscillator').textContent = `${snapshot.frequencyHz.toFixed(1)} Hz · ${waveform.value}`;
-    $('#flowEnvelope').textContent = `${stageLabel(advanceEnvelope(envelopeState, envelopeSettings(), performance.now()).stage)} · ${envelopeVoltage.toFixed(2)} V`;
+    $('#flowEnvelope').textContent = `${stageLabel(advanceEnvelope(envelopeState, envelopeSettings(), now).stage)} · ${envelopeVoltage.toFixed(2)} V`;
     $('#flowAudio').textContent = audio ? (muted ? 'Muted' : 'Playing') : 'Stopped';
     root.querySelectorAll<HTMLElement>('[data-node]').forEach((node) => node.classList.remove('active'));
-    const activeNode = !running ? 'clock' : !snapshot.stepActive ? 'sequence' : snapshot.gateHigh ? 'envelope' : 'audio';
+    const phase = snapshot.stepElapsedMs / Math.max(1, snapshot.stepDurationMs);
+    const activeNode = !running ? 'clock' : phase < .12 ? 'clock' : phase < .25 ? 'sequence' : phase < .38 ? 'quantizer' : phase < .5 ? 'oscillator' : snapshot.stepActive ? 'envelope' : 'audio';
     root.querySelector<HTMLElement>(`[data-node="${activeNode}"]`)?.classList.add('active');
   }
 
@@ -416,8 +436,6 @@ export function mountPatch(root: HTMLElement) {
         rawVoltage: snapshot.rawVoltage,
         quantizedVoltage: snapshot.quantizedVoltage,
         envelopeVoltage: envelope.voltage,
-        gate: snapshot.gateHigh,
-        step: snapshot.index,
       });
       if (history.length > HISTORY_LENGTH) history.shift();
       lastHistoryAt = now;
@@ -439,7 +457,7 @@ export function mountPatch(root: HTMLElement) {
     $('#envelopeReadout').textContent = `${envelope.voltage.toFixed(2)} V`;
     $('#transportReadout').textContent = running ? `${bpm.value} BPM` : 'Stopped';
     $('#audioReadout').textContent = audio ? (muted ? 'Muted' : 'Playing') : 'Stopped';
-    updateFlow(snapshot, envelope.voltage);
+    updateFlow(snapshot, envelope.voltage, now);
 
     if (!running) {
       $('#explainTitle').textContent = 'The patch is stopped';
@@ -452,7 +470,7 @@ export function mountPatch(root: HTMLElement) {
       $('#explainText').textContent = `${snapshot.rawVoltage.toFixed(2)} V became ${snapshot.quantizedVoltage.toFixed(3)} V. The oscillator follows at ${snapshot.frequencyHz.toFixed(1)} Hz while the ${stageLabel(envelope.stage).toLowerCase()} stage controls loudness.`;
     } else {
       $('#explainTitle').textContent = `${snapshot.note} is releasing`;
-      $('#explainText').textContent = `The step is still selected, but its gate has ended. The envelope falls smoothly from its current voltage until the next step arrives.`;
+      $('#explainText').textContent = 'The step is still selected, but its gate has ended. The envelope falls smoothly from its current voltage until the next step arrives.';
     }
 
     animationFrame = requestAnimationFrame(render);
@@ -474,7 +492,7 @@ export function mountPatch(root: HTMLElement) {
   transportButton.addEventListener('click', startTransport);
   $('#resetTransport').addEventListener('click', resetTransport);
   $('#manualStep').addEventListener('click', manualStep);
-  $('#randomise').addEventListener('click', rotateSequence);
+  $('#rotateSequence').addEventListener('click', rotateSequence);
   $('#audioStart').addEventListener('click', startAudio);
   $('#audioMute').addEventListener('click', toggleMute);
   $('#audioStop').addEventListener('click', stopAudio);
