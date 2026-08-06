@@ -8,6 +8,7 @@ Voltage Lab is a suite of small visual and audible laboratories for learning con
 - **Clock & Trigger Lab** — learn clocks, triggers, gates, divisions and timing relationships through visible and audible events.
 - **Oscillator Lab** — see and hear waveform, frequency, harmonics and control-voltage modulation with a triggered stationary oscilloscope.
 - **Quantizer Lab** — turn continuous CV into exact notes and scales using live or trigger-held quantization, stepped voltage history and audible comparison.
+- **Envelope Lab** — shape a 0–5 V ADSR signal from gates and triggers, then route it to loudness, filter brightness or pitch.
 
 ## Architecture
 
@@ -17,6 +18,7 @@ packages/cv-model/           deterministic Sample & Hold voltage behaviour
 packages/clock-model/        deterministic clock, trigger and gate behaviour
 packages/oscillator-model/   deterministic oscillator and modulation behaviour
 packages/quantizer-model/    deterministic notes, scales and quantization behaviour
+packages/envelope-model/     deterministic ADSR stage and retrigger behaviour
 packages/audio-safety/       shared browser-audio lifecycle and shutdown
 packages/lessons/            reusable guided lesson contracts
 packages/ui/                 shared visual tokens
