@@ -19,7 +19,7 @@ Explore exposes the full control surface:
 
 ## Evidence
 
-The one-cycle oscilloscope shows voltage shape, amplitude, offset and phase. The harmonic spectrum shows the ideal relative harmonic family for the selected waveform. Live readouts report note, frequency, period and peak-to-peak voltage.
+The oscilloscope is live rather than a static redraw. A gold playhead moves continuously through the cycle and the current-voltage readout follows it. The display is deliberately time-expanded so audio-rate motion remains visible, while the period readout reports the exact real oscillator period. The trace shows waveform shape, amplitude, offset and phase. The harmonic spectrum shows the ideal relative harmonic family for the selected waveform. Live readouts report note, frequency, period, current voltage and peak-to-peak voltage.
 
 ## Safety and boundaries
 
