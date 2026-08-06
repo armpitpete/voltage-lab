@@ -17,7 +17,7 @@ describe('Visual Patch Cables v1.0', () => {
       direction: 'output-to-input',
       signalType: 'clock',
       source: expect.objectContaining({ label: 'Clock' }),
-      destination: expect.objectContaining({ label: 'Sample event' }),
+      destination: expect.objectContaining({ label: 'Trigger / gate' }),
     })]);
     expect(view.cables[0]?.accessibleLabel).toContain('output connected to');
   });
