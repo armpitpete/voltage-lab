@@ -24,6 +24,7 @@ export class BrowserFullSynthVoice {
   private readonly master: GainNode;
   private controls: FullSynthVoiceControls;
   private disposed = false;
+  private gateOpen = false;
 
   private constructor(private readonly context: AudioContext, controls: FullSynthVoiceControls) {
     this.controls = controls;
@@ -54,6 +55,7 @@ export class BrowserFullSynthVoice {
 
   gate(open: boolean): void {
     if (this.disposed) return;
+    this.gateOpen = open;
     const now = this.context.currentTime;
     hold(this.vca.gain, now);
     if (open) {
@@ -82,5 +84,6 @@ export class BrowserFullSynthVoice {
     this.oscillator.type = this.controls.waveform;
     this.oscillator.frequency.setTargetAtTime(pitchCvToFrequency(this.controls.pitchCv), now, 0.012);
     this.filter.frequency.setTargetAtTime(cutoffCvToFrequency(this.controls.cutoffCv), now, 0.012);
+    if (this.gateOpen) this.vca.gain.setTargetAtTime(vcaCvToGain(this.controls.vcaCv, this.controls.level), now, 0.012);
   }
 }
