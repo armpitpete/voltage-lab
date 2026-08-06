@@ -1,6 +1,8 @@
+import type { SignalType } from '../../signal-spec/src/index';
+
 export const MODULE_INTERFACE_VERSION = '1.0' as const;
 
-export type ModuleSignalType = 'audio' | 'cv' | 'clock' | 'gate' | 'trigger';
+export type ModuleSignalType = SignalType;
 export type ModulePortDirection = 'input' | 'output';
 
 export type SignalRange =
