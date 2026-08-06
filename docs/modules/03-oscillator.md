@@ -19,7 +19,7 @@ Explore exposes the full control surface:
 
 ## Evidence
 
-The oscilloscope uses a fixed 20 ms time window. Frequency therefore changes the visible cycle density: 220 Hz shows 4.4 cycles, while 440 Hz shows 8.8 cycles in the same width. A gold marker identifies the current sample and the current-voltage readout follows it. Motion is time-expanded so audio-rate movement remains inspectable, while cycle density, frequency and period use the real oscillator values. The trace shows waveform shape, amplitude, offset and phase. The harmonic spectrum shows the ideal relative harmonic family for the selected waveform.
+The oscilloscope is triggered and stationary. Its right-hand trigger point is phase-locked, so the trace does not scroll while the oscillator audio continues. The display uses a fixed 20 ms time window. Frequency therefore changes the visible cycle density: 220 Hz shows 4.4 cycles, while 440 Hz shows 8.8 cycles in the same width. The gold marker identifies the trigger sample and the trigger-voltage readout reports its value. Phase shifts the stationary trace horizontally; amplitude and DC offset move it vertically. The harmonic spectrum shows the ideal relative harmonic family for the selected waveform.
 
 ## Safety and boundaries
 
