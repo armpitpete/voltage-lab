@@ -19,7 +19,7 @@ Explore exposes the full control surface:
 
 ## Evidence
 
-The oscilloscope is live rather than a static redraw. A gold playhead moves continuously through the cycle and the current-voltage readout follows it. The display is deliberately time-expanded so audio-rate motion remains visible, while the period readout reports the exact real oscillator period. The trace shows waveform shape, amplitude, offset and phase. The harmonic spectrum shows the ideal relative harmonic family for the selected waveform. Live readouts report note, frequency, period, current voltage and peak-to-peak voltage.
+The oscilloscope uses a fixed 20 ms time window. Frequency therefore changes the visible cycle density: 220 Hz shows 4.4 cycles, while 440 Hz shows 8.8 cycles in the same width. A gold marker identifies the current sample and the current-voltage readout follows it. Motion is time-expanded so audio-rate movement remains inspectable, while cycle density, frequency and period use the real oscillator values. The trace shows waveform shape, amplitude, offset and phase. The harmonic spectrum shows the ideal relative harmonic family for the selected waveform.
 
 ## Safety and boundaries
 

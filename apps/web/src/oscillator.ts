@@ -8,14 +8,19 @@ import {
   periodMs,
   phaseAt,
   pulseWaveCoefficients,
+  scopeCycles,
   waveformSample,
   webAudioWaveform,
   type Waveform,
 } from '../../../packages/oscillator-model/src/index';
 
+const SCOPE_WINDOW_MS = 20;
+const SCOPE_WINDOW_SECONDS = SCOPE_WINDOW_MS / 1000;
+const SCOPE_SAMPLES = 1200;
+
 const lessons = [
-  ['What is an oscillator?', 'A repeating voltage moves through the same cycle again and again. Change frequency and watch the live playhead speed up or slow down.'],
-  ['Frequency and pitch', 'Double frequency to hear one octave upward. Halve it to hear one octave downward.'],
+  ['What is an oscillator?', 'A repeating voltage moves through the same cycle again and again. Change frequency and watch more or fewer cycles fit inside the fixed 20 ms scope window.'],
+  ['Frequency and pitch', 'Double frequency to hear one octave upward and see twice as many cycles in the same time window.'],
   ['One volt per octave', 'Raise CV by exactly 1 V. Frequency doubles while the waveform shape stays the same.'],
   ['Compare waveforms', 'Sine has one harmonic. Triangle, saw and square add different harmonic patterns.'],
   ['Pulse width', 'Choose Pulse and move width. The high and low parts change length and the harmonic balance changes.'],
@@ -25,7 +30,7 @@ const lessons = [
 ] as const;
 
 export function mountOscillator(root: HTMLElement) {
-  root.innerHTML = `<section class="module-header"><div><p class="eyebrow">Module 03 · sound source</p><h2>Oscillator Lab</h2><p>See, measure and hear a repeating voltage become pitch, waveform and harmonics.</p></div><div><button id="learnTab" class="active">Learn</button> <button id="exploreTab">Explore</button></div></section><section id="lesson" class="lesson panel"><div><span id="lessonCount"></span><h3 id="lessonTitle"></h3><p id="lessonText"></p></div><div><button id="prev">Previous</button> <button id="next">Next experiment</button></div></section><section class="lab-grid"><aside class="controls panel"><h3>Oscillator</h3><label>Waveform<select id="wave"><option>sine</option><option>triangle</option><option>saw</option><option>square</option><option>pulse</option></select></label><label>Base frequency<input id="frequency" type="range" min="20" max="1000" step="1" value="220"><output id="frequencyOut"></output></label><label>1 V/oct CV<input id="cv" type="range" min="-3" max="3" step=".01" value="0"><output id="cvOut"></output></label><label>Coarse tune<input id="coarse" type="range" min="-3" max="3" step="1" value="0"><output id="coarseOut"></output></label><label>Fine tune<input id="fine" type="range" min="-100" max="100" step="1" value="0"><output id="fineOut"></output></label><label>Pulse width<input id="width" type="range" min=".05" max=".95" step=".01" value=".5"><output id="widthOut"></output></label><label>Phase<input id="phase" type="range" min="0" max="1" step=".01" value="0"><output id="phaseOut"></output></label><label>Amplitude<input id="amplitude" type="range" min="0" max="5" step=".1" value="2.5"><output id="amplitudeOut"></output></label><label>DC offset<input id="offset" type="range" min="-5" max="5" step=".1" value="0"><output id="offsetOut"></output></label><label>Volume<input id="volume" type="range" min="0" max=".12" step=".005" value=".035"><output id="volumeOut"></output></label><div class="button-row"><button id="audioStart" class="primary">Start audio</button><button id="audioMute">Mute</button><button id="audioStop">Panic / stop</button><button id="reset">Reset</button></div></aside><main class="workbench"><section class="scope panel"><div class="scope-heading"><div><p class="eyebrow">Live time-expanded oscilloscope</p><h3>Waveform and voltage</h3></div><div class="readouts"><span>Pitch<b id="pitchReadout"></b></span><span>Period<b id="periodReadout"></b></span><span>Current voltage<b id="instantReadout"></b></span><span>Peak-to-peak<b id="ppReadout"></b></span></div></div><canvas id="waveCanvas" width="1100" height="360"></canvas></section><section class="scope panel"><div class="scope-heading"><div><p class="eyebrow">Harmonic spectrum</p><h3>Relative harmonic strength</h3></div><div class="readouts"><span>Fundamental<b id="fundamentalReadout"></b></span><span>Audio status<b id="audioStatus">Stopped</b></span></div></div><canvas id="spectrumCanvas" width="1100" height="280"></canvas></section><section class="explanation panel"><p class="eyebrow">What changed?</p><h3 id="explainTitle">A repeating voltage</h3><p id="explainText"></p></section></main></section>`;
+  root.innerHTML = `<section class="module-header"><div><p class="eyebrow">Module 03 · sound source</p><h2>Oscillator Lab</h2><p>See, measure and hear a repeating voltage become pitch, waveform and harmonics.</p></div><div><button id="learnTab" class="active">Learn</button> <button id="exploreTab">Explore</button></div></section><section id="lesson" class="lesson panel"><div><span id="lessonCount"></span><h3 id="lessonTitle"></h3><p id="lessonText"></p></div><div><button id="prev">Previous</button> <button id="next">Next experiment</button></div></section><section class="lab-grid"><aside class="controls panel"><h3>Oscillator</h3><label>Waveform<select id="wave"><option>sine</option><option>triangle</option><option>saw</option><option>square</option><option>pulse</option></select></label><label>Base frequency<input id="frequency" type="range" min="20" max="1000" step="1" value="220"><output id="frequencyOut"></output></label><label>1 V/oct CV<input id="cv" type="range" min="-3" max="3" step=".01" value="0"><output id="cvOut"></output></label><label>Coarse tune<input id="coarse" type="range" min="-3" max="3" step="1" value="0"><output id="coarseOut"></output></label><label>Fine tune<input id="fine" type="range" min="-100" max="100" step="1" value="0"><output id="fineOut"></output></label><label>Pulse width<input id="width" type="range" min=".05" max=".95" step=".01" value=".5"><output id="widthOut"></output></label><label>Phase<input id="phase" type="range" min="0" max="1" step=".01" value="0"><output id="phaseOut"></output></label><label>Amplitude<input id="amplitude" type="range" min="0" max="5" step=".1" value="2.5"><output id="amplitudeOut"></output></label><label>DC offset<input id="offset" type="range" min="-5" max="5" step=".1" value="0"><output id="offsetOut"></output></label><label>Volume<input id="volume" type="range" min="0" max=".12" step=".005" value=".035"><output id="volumeOut"></output></label><div class="button-row"><button id="audioStart" class="primary">Start audio</button><button id="audioMute">Mute</button><button id="audioStop">Panic / stop</button><button id="reset">Reset</button></div></aside><main class="workbench"><section class="scope panel"><div class="scope-heading"><div><p class="eyebrow">Live oscilloscope · fixed 20 ms window</p><h3>Waveform and voltage</h3></div><div class="readouts"><span>Pitch<b id="pitchReadout"></b></span><span>Period<b id="periodReadout"></b></span><span>Cycles shown<b id="cyclesReadout"></b></span><span>Current voltage<b id="instantReadout"></b></span><span>Peak-to-peak<b id="ppReadout"></b></span></div></div><canvas id="waveCanvas" width="1100" height="360"></canvas></section><section class="scope panel"><div class="scope-heading"><div><p class="eyebrow">Harmonic spectrum</p><h3>Relative harmonic strength</h3></div><div class="readouts"><span>Fundamental<b id="fundamentalReadout"></b></span><span>Audio status<b id="audioStatus">Stopped</b></span></div></div><canvas id="spectrumCanvas" width="1100" height="280"></canvas></section><section class="explanation panel"><p class="eyebrow">What changed?</p><h3 id="explainTitle">A repeating voltage</h3><p id="explainText"></p></section></main></section>`;
 
   const $ = <T extends Element>(selector: string) => {
     const element = root.querySelector<T>(selector);
@@ -72,8 +77,8 @@ export function mountOscillator(root: HTMLElement) {
     18000,
   );
 
-  function displayCyclesPerSecond() {
-    return clamp(0.45 + Math.log2(hz() / 20) * 0.24, 0.45, 2.5);
+  function displayPhaseRate() {
+    return clamp(hz() / 50, 0.4, 12);
   }
 
   function liveVoltage(cyclePhase: number) {
@@ -86,37 +91,59 @@ export function mountOscillator(root: HTMLElement) {
   }
 
   function drawWave(cyclePhase = visualPhase) {
+    const left = 55;
+    const right = waveCanvas.width - 20;
+    const plotWidth = right - left;
+    const centreY = waveCanvas.height / 2;
+    const currentHz = hz();
+
     waveContext.fillStyle = '#101821';
     waveContext.fillRect(0, 0, waveCanvas.width, waveCanvas.height);
-    waveContext.strokeStyle = '#334652';
+
+    waveContext.strokeStyle = '#263944';
     waveContext.lineWidth = 1;
+    waveContext.fillStyle = '#8fa1ad';
+    waveContext.font = '12px system-ui';
+    for (let tick = 0; tick <= 4; tick++) {
+      const x = left + tick * plotWidth / 4;
+      waveContext.beginPath();
+      waveContext.moveTo(x, 20);
+      waveContext.lineTo(x, waveCanvas.height - 28);
+      waveContext.stroke();
+      const millisecondsAgo = SCOPE_WINDOW_MS - tick * (SCOPE_WINDOW_MS / 4);
+      waveContext.fillText(millisecondsAgo === 0 ? 'now' : `−${millisecondsAgo} ms`, x - 18, waveCanvas.height - 9);
+    }
+
+    waveContext.strokeStyle = '#334652';
     waveContext.beginPath();
-    waveContext.moveTo(55, waveCanvas.height / 2);
-    waveContext.lineTo(waveCanvas.width - 20, waveCanvas.height / 2);
+    waveContext.moveTo(left, centreY);
+    waveContext.lineTo(right, centreY);
     waveContext.stroke();
 
     waveContext.strokeStyle = '#79c8ff';
     waveContext.lineWidth = 3;
     waveContext.beginPath();
-    for (let i = 0; i < 600; i++) {
-      const pointPhase = i / 599 + Number(phase.value);
+    for (let i = 0; i < SCOPE_SAMPLES; i++) {
+      const position = i / (SCOPE_SAMPLES - 1);
+      const timeFromNow = (position - 1) * SCOPE_WINDOW_SECONDS;
+      const pointPhase = cyclePhase + timeFromNow * currentHz + Number(phase.value);
       const sample = waveformSample(type(), pointPhase, Number(width.value));
       const voltage = outputVoltage(sample, Number(amplitude.value), Number(offset.value));
-      const x = 55 + i * (waveCanvas.width - 80) / 599;
-      const y = waveCanvas.height / 2 - voltage * (waveCanvas.height * 0.075);
+      const x = left + position * plotWidth;
+      const y = centreY - voltage * (waveCanvas.height * 0.075);
       if (i) waveContext.lineTo(x, y);
       else waveContext.moveTo(x, y);
     }
     waveContext.stroke();
 
     const voltage = liveVoltage(cyclePhase);
-    const markerX = 55 + cyclePhase * (waveCanvas.width - 80);
-    const markerY = waveCanvas.height / 2 - voltage * (waveCanvas.height * 0.075);
+    const markerX = right;
+    const markerY = centreY - voltage * (waveCanvas.height * 0.075);
     waveContext.strokeStyle = '#f4c96b';
     waveContext.lineWidth = 1.5;
     waveContext.beginPath();
     waveContext.moveTo(markerX, 20);
-    waveContext.lineTo(markerX, waveCanvas.height - 20);
+    waveContext.lineTo(markerX, waveCanvas.height - 28);
     waveContext.stroke();
     waveContext.fillStyle = '#f4c96b';
     waveContext.beginPath();
@@ -129,7 +156,7 @@ export function mountOscillator(root: HTMLElement) {
       waveContext.fillText(
         `${volts} V`,
         8,
-        waveCanvas.height / 2 - volts * (waveCanvas.height * 0.075) + 4,
+        centreY - volts * (waveCanvas.height * 0.075) + 4,
       );
     }
 
@@ -173,6 +200,7 @@ export function mountOscillator(root: HTMLElement) {
   function render() {
     const currentHz = hz();
     const waveform = type();
+    const visibleCycles = scopeCycles(currentHz, SCOPE_WINDOW_MS);
     $<HTMLOutputElement>('#frequencyOut').value = `${Number(frequency.value).toFixed(0)} Hz`;
     $<HTMLOutputElement>('#cvOut').value = `${Number(cv.value).toFixed(2)} V`;
     $<HTMLOutputElement>('#coarseOut').value = `${Number(coarse.value)} oct`;
@@ -184,6 +212,7 @@ export function mountOscillator(root: HTMLElement) {
     $<HTMLOutputElement>('#volumeOut').value = `${Math.round(Number(volume.value) / 0.12 * 100)}%`;
     $<HTMLElement>('#pitchReadout').textContent = `${frequencyToNoteName(currentHz)} · ${currentHz < 1000 ? currentHz.toFixed(1) : `${(currentHz / 1000).toFixed(2)} k`} Hz`;
     $<HTMLElement>('#periodReadout').textContent = `${periodMs(currentHz).toFixed(2)} ms`;
+    $<HTMLElement>('#cyclesReadout').textContent = `${visibleCycles.toFixed(1)} in ${SCOPE_WINDOW_MS} ms`;
     $<HTMLElement>('#ppReadout').textContent = `${peakToPeak(Number(amplitude.value)).toFixed(1)} V`;
     $<HTMLElement>('#fundamentalReadout').textContent = `${currentHz.toFixed(1)} Hz`;
     $<HTMLElement>('#explainTitle').textContent = waveform === 'sine'
@@ -195,7 +224,7 @@ export function mountOscillator(root: HTMLElement) {
           : waveform === 'square'
             ? 'Odd harmonics only'
             : 'Pulse width reshapes harmonics';
-    $<HTMLElement>('#explainText').textContent = `The oscillator repeats every ${periodMs(currentHz).toFixed(2)} ms. The gold playhead is time-expanded so the cycle remains visible. Its output is centred at ${Number(offset.value).toFixed(1)} V with ${peakToPeak(Number(amplitude.value)).toFixed(1)} V peak-to-peak.`;
+    $<HTMLElement>('#explainText').textContent = `The fixed ${SCOPE_WINDOW_MS} ms scope window contains ${visibleCycles.toFixed(1)} cycles at ${currentHz.toFixed(1)} Hz. Doubling frequency doubles the number of visible cycles. The movement is slowed for inspection, but the cycle density and period readout use the real frequency.`;
     width.disabled = waveform !== 'pulse';
     drawWave();
     drawSpectrum();
@@ -206,7 +235,7 @@ export function mountOscillator(root: HTMLElement) {
     if (disposed) return;
     const elapsed = Math.min((now - previousFrameTime) / 1000, 0.1);
     previousFrameTime = now;
-    visualPhase = phaseAt(elapsed, displayCyclesPerSecond(), visualPhase);
+    visualPhase = phaseAt(elapsed, displayPhaseRate(), visualPhase);
     drawWave(visualPhase);
     animationFrame = requestAnimationFrame(animate);
   }
