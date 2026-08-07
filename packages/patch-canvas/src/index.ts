@@ -124,3 +124,42 @@ export function listPatchCanvasOutputs(): readonly ModulePortContract[] {
 export function listPatchCanvasInputs(): readonly ModulePortContract[] {
   return PORT_CONTRACTS.filter((port) => port.direction === 'input');
 }
+
+export type PatchCanvasRackModule = {
+  moduleId: string;
+  moduleNumber: number;
+  moduleTitle: string;
+  inputs: readonly ModulePortContract[];
+  outputs: readonly ModulePortContract[];
+};
+
+/**
+ * Produces the whole visible rack from the same port contracts used for compatibility.
+ * A declared patch point cannot be omitted from the rack without a contract-test failure.
+ */
+export function listPatchCanvasRackModules(): readonly PatchCanvasRackModule[] {
+  const modules = new Map<string, {
+    moduleId: string;
+    moduleNumber: number;
+    moduleTitle: string;
+    inputs: ModulePortContract[];
+    outputs: ModulePortContract[];
+  }>();
+
+  for (const port of [...listPatchCanvasInputs(), ...listPatchCanvasOutputs()]) {
+    const module = modules.get(port.moduleId) ?? {
+      moduleId: port.moduleId,
+      moduleNumber: port.moduleNumber,
+      moduleTitle: port.moduleTitle,
+      inputs: [],
+      outputs: [],
+    };
+    if (port.direction === 'input') module.inputs.push(port);
+    else module.outputs.push(port);
+    modules.set(port.moduleId, module);
+  }
+
+  return [...modules.values()].sort((left, right) =>
+    left.moduleNumber - right.moduleNumber || left.moduleTitle.localeCompare(right.moduleTitle),
+  );
+}
