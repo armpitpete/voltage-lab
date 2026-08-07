@@ -1,4 +1,5 @@
 import type { PatchState } from '../../connection-engine/src/index';
+import type { BrowserAudioSource } from '../../browser-audio-boundary/src/index';
 
 export const FULL_SYNTH_VOICE_VERSION = '1.0' as const;
 
@@ -25,12 +26,23 @@ export type FullSynthVoicePlan = {
   teachingNote: string;
 };
 
+export type FullSynthVoiceSourcePlan = {
+  ready: boolean;
+  reason: string;
+};
+
 export const REQUIRED_VOICE_CABLES: readonly RequiredVoiceCable[] = [
   {
-    sourceEndpointId: 'patch:audio',
+    sourceEndpointId: 'oscillator:waveform',
+    destinationEndpointId: 'browser-audio-boundary:oscillator-input',
+    label: 'Oscillator → Browser Audio Boundary',
+    purpose: 'Carries Module 03’s conceptual waveform into the explicit browser-audio boundary.',
+  },
+  {
+    sourceEndpointId: 'browser-audio-boundary:normalised-output',
     destinationEndpointId: 'filter:audio',
-    label: 'Patch audio → Filter audio',
-    purpose: 'Carries the browser-normalised voice source into the filter.',
+    label: 'Normalised audio → Filter audio',
+    purpose: 'Carries the explicit browser-normalised waveform into the filter.',
   },
   {
     sourceEndpointId: 'filter:filtered',
@@ -87,8 +99,8 @@ function hasDirectCable(state: PatchState, required: RequiredVoiceCable): boolea
 
 /**
  * A voice becomes audible only when these exact real Connection Engine cables exist.
- * The browser source is a bounded reference rendering of the Patch audio socket; it
- * deliberately does not import or mutate Module 06's independent teaching controls.
+ * It has no default oscillator: the browser source must be published by Module 03 and
+ * is rendered only through the explicit conceptual-voltage → browser-audio boundary.
  */
 export function planFullSynthVoice(state: PatchState): FullSynthVoicePlan {
   const missingCables = REQUIRED_VOICE_CABLES.filter((required) => !hasDirectCable(state, required));
@@ -98,7 +110,13 @@ export function planFullSynthVoice(state: PatchState): FullSynthVoicePlan {
     requiredCables: REQUIRED_VOICE_CABLES,
     missingCables,
     teachingNote: missingCables.length
-      ? 'A full voice needs a real audio path and a real control path. Connect every listed cable before sound can start.'
-      : 'This audible reference voice follows the real Patch audio → Filter → VCA route and Envelope → VCA CV control route.',
+      ? 'A full voice needs the explicit oscillator-to-browser-audio path and the envelope control path. Connect every listed cable before sound can start.'
+      : 'This voice follows Module 03 oscillator → Browser Audio Boundary → Filter → VCA, plus Envelope → VCA CV.',
   };
+}
+
+export function planFullSynthVoiceSource(source: BrowserAudioSource | undefined): FullSynthVoiceSourcePlan {
+  return source
+    ? { ready: true, reason: `Module 03 source: ${source.waveform}, ${source.frequencyHz.toFixed(1)} Hz, ±${source.sourcePeakVolts.toFixed(1)} V.` }
+    : { ready: false, reason: 'Open Module 03 Oscillator Lab first so it can publish its actual current source configuration.' };
 }
