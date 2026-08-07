@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { voltageLabModules } from '../../module-interface/src/modules';
 import {
   PORT_CONTRACTS,
+  ALL_PORT_CONTRACTS,
+  BROWSER_AUDIO_BOUNDARY_PORTS,
   PORT_CONTRACT_VERSION,
   evaluatePortCompatibility,
   findPortContract,
@@ -22,6 +24,7 @@ describe('Voltage Lab Module Port Contracts v1.0', () => {
     );
     expect(PORT_CONTRACTS).toHaveLength(declaredCount);
     expect(new Set(PORT_CONTRACTS.map((contract) => contract.endpointId)).size).toBe(declaredCount);
+    expect(ALL_PORT_CONTRACTS).toHaveLength(declaredCount + BROWSER_AUDIO_BOUNDARY_PORTS.length);
     expect(PORT_CONTRACTS.every((contract) => contract.version === PORT_CONTRACT_VERSION)).toBe(true);
     expect(validatePortContracts()).toEqual([]);
   });
@@ -60,6 +63,11 @@ describe('Voltage Lab Module Port Contracts v1.0', () => {
       semantic: 'same-signal',
       adaptation: 'representation',
     });
+  });
+
+  it('offers only the declared browser-audio boundary as a direct bridge for oscillator audio', () => {
+    expect(evaluatePortCompatibility(port('oscillator', 'waveform'), port('browser-audio-boundary', 'oscillator-input'))).toMatchObject({ level: 'direct', adaptation: 'none' });
+    expect(evaluatePortCompatibility(port('browser-audio-boundary', 'normalised-output'), port('filter', 'audio'))).toMatchObject({ level: 'direct', adaptation: 'none' });
   });
 
   it('rejects incompatible signal meanings and wrong direction', () => {
