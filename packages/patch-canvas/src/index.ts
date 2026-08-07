@@ -1,5 +1,5 @@
 import {
-  PORT_CONTRACTS,
+  ALL_PORT_CONTRACTS,
   evaluatePortCompatibility,
   type ModulePortContract,
   type PortCompatibility,
@@ -47,7 +47,7 @@ export type PatchCanvasProposal = {
 };
 
 function findPort(endpointId: PortEndpointId | undefined): ModulePortContract | undefined {
-  return endpointId ? PORT_CONTRACTS.find((port) => port.endpointId === endpointId) : undefined;
+  return endpointId ? ALL_PORT_CONTRACTS.find((port) => port.endpointId === endpointId) : undefined;
 }
 
 function routeFor(
@@ -118,9 +118,9 @@ export function createPatchCanvasProposal(selection: PatchCanvasSelection = {}):
 }
 
 export function listPatchCanvasOutputs(): readonly ModulePortContract[] {
-  return PORT_CONTRACTS.filter((port) => port.direction === 'output');
+  return ALL_PORT_CONTRACTS.filter((port) => port.direction === 'output');
 }
 
 export function listPatchCanvasInputs(): readonly ModulePortContract[] {
-  return PORT_CONTRACTS.filter((port) => port.direction === 'input');
+  return ALL_PORT_CONTRACTS.filter((port) => port.direction === 'input');
 }
