@@ -1,2 +1,8 @@
 import { defineConfig } from 'vite';
-export default defineConfig({base:'/voltage-lab/',build:{outDir:'dist'}});
+
+const base = process.env.VERCEL === '1' ? '/' : '/voltage-lab/';
+
+export default defineConfig({
+  base,
+  build: { outDir: 'dist' },
+});
