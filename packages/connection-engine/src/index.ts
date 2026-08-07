@@ -1,5 +1,5 @@
 import {
-  PORT_CONTRACTS,
+  ALL_PORT_CONTRACTS,
   evaluatePortCompatibility,
   type ModulePortContract,
   type PortCompatibility,
@@ -78,7 +78,7 @@ export function connectPorts(
   state: PatchState,
   sourceEndpointId: PortEndpointId,
   destinationEndpointId: PortEndpointId,
-  ports: readonly ModulePortContract[] = PORT_CONTRACTS,
+  ports: readonly ModulePortContract[] = ALL_PORT_CONTRACTS,
 ): ConnectResult {
   const source = findPort(sourceEndpointId, ports);
   const destination = findPort(destinationEndpointId, ports);
@@ -158,7 +158,7 @@ export function disconnectPort(state: PatchState, connectionId: ConnectionId): D
 export function propagateSignals(
   state: PatchState,
   frames: readonly SignalFrame[],
-  ports: readonly ModulePortContract[] = PORT_CONTRACTS,
+  ports: readonly ModulePortContract[] = ALL_PORT_CONTRACTS,
 ): SignalPropagation {
   const deliveries: SignalDelivery[] = [];
   const rejectedFrames: { frame: SignalFrame; reason: string }[] = [];
