@@ -57,7 +57,7 @@ describe('Patch Canvas v1.0', () => {
   it('offers exactly the declared output and input sockets', () => {
     expect(listPatchCanvasOutputs().every((port) => port.direction === 'output')).toBe(true);
     expect(listPatchCanvasInputs().every((port) => port.direction === 'input')).toBe(true);
-    expect(listPatchCanvasOutputs()).toHaveLength(23);
-    expect(listPatchCanvasInputs()).toHaveLength(20);
+    expect(listPatchCanvasOutputs()).toHaveLength(24);
+    expect(listPatchCanvasInputs()).toHaveLength(21);
   });
 });
