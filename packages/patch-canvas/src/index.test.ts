@@ -3,6 +3,7 @@ import {
   createPatchCanvasProposal,
   listPatchCanvasInputs,
   listPatchCanvasOutputs,
+  listPatchCanvasRackModules,
 } from './index';
 
 describe('Patch Canvas v1.0', () => {
@@ -59,5 +60,20 @@ describe('Patch Canvas v1.0', () => {
     expect(listPatchCanvasInputs().every((port) => port.direction === 'input')).toBe(true);
     expect(listPatchCanvasOutputs()).toHaveLength(23);
     expect(listPatchCanvasInputs()).toHaveLength(20);
+  });
+
+  it('exposes every declared module and socket in the full rack', () => {
+    const rack = listPatchCanvasRackModules();
+    const visibleEndpoints = rack.flatMap((module) => [
+      ...module.inputs.map((port) => port.endpointId),
+      ...module.outputs.map((port) => port.endpointId),
+    ]);
+
+    expect(rack).toHaveLength(9);
+    expect(rack.map((module) => module.moduleNumber)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(new Set(visibleEndpoints)).toEqual(new Set([
+      ...listPatchCanvasInputs().map((port) => port.endpointId),
+      ...listPatchCanvasOutputs().map((port) => port.endpointId),
+    ]));
   });
 });

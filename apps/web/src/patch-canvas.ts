@@ -1,9 +1,9 @@
 import {
   createPatchCanvasProposal,
-  listPatchCanvasInputs,
-  listPatchCanvasOutputs,
+  listPatchCanvasRackModules,
   type PatchCanvasProposal,
 } from '../../../packages/patch-canvas/src/index';
+import { voltageLabModules } from '../../../packages/module-interface/src/modules';
 import {
   connectPorts,
   createPatchState,
@@ -23,13 +23,57 @@ import { createLiveSignalRuntime, observeLiveSignal, publishSignal, type LiveSig
 import { inspectSignal } from '../../../packages/signal-inspector/src/index';
 import type { ModulePortContract, PortEndpointId } from '../../../packages/port-contracts/src/index';
 
-function endpointLabel(port: ModulePortContract): string {
-  return 'M' + port.moduleNumber + ' · ' + port.moduleTitle + ' — ' + port.label +
-    ' [' + port.signalType + ', ' + port.range.minimum + ' to ' + port.range.maximum + ' ' + port.range.unit + ']';
+const moduleRoutes = new Map(voltageLabModules.map((module) => [module.id, module.route]));
+
+function portButtonMarkup(port: ModulePortContract, role: 'input' | 'output', selected: PortEndpointId | undefined): string {
+  const selectedClass = selected === port.endpointId ? ' selected' : '';
+  const dataAttribute = role === 'output' ? 'data-patch-canvas-output' : 'data-patch-canvas-input';
+  return '<button type="button" class="patch-rack-port ' + role + selectedClass + '" ' + dataAttribute + '="' + port.endpointId + '" aria-pressed="' + (selected === port.endpointId ? 'true' : 'false') + '">' +
+    '<span class="patch-rack-jack" aria-hidden="true"></span><span><b>' + port.label + '</b><small>' + port.signalType + ' · ' + port.range.minimum + ' to ' + port.range.maximum + ' ' + port.range.unit + '</small></span></button>';
 }
 
-function optionList(ports: readonly ModulePortContract[]): string {
-  return ports.map((port) => '<option value="' + port.endpointId + '">' + endpointLabel(port) + '</option>').join('');
+function moduleControlsMarkup(moduleId: string, controls: FullSynthVoiceControls, envelopeValue: number): string {
+  const liveLabel = '<p class="patch-rack-control-status"><b>Live voice control</b> · shared with the safe monitor below.</p>';
+  if (moduleId === 'oscillator') {
+    const waveformOptions = ['sawtooth', 'square', 'triangle', 'sine'].map((waveform) =>
+      '<option value="' + waveform + '"' + (controls.waveform === waveform ? ' selected' : '') + '>' +
+      ({ sawtooth: 'Saw', square: 'Square', triangle: 'Triangle', sine: 'Sine' } as Record<string, string>)[waveform] + '</option>',
+    ).join('');
+    return '<section class="patch-rack-controls"><h4>Controls</h4>' + liveLabel +
+      '<label>Waveform <select data-full-voice-waveform>' + waveformOptions + '</select></label>' +
+      '<label>Pitch CV <input data-full-voice-pitch type="range" min="-3" max="3" step=".01" value="' + controls.pitchCv + '"><output>' + controls.pitchCv.toFixed(2) + ' V</output></label></section>';
+  }
+  if (moduleId === 'filter') {
+    return '<section class="patch-rack-controls"><h4>Controls</h4>' + liveLabel +
+      '<label>Cutoff CV <input data-full-voice-cutoff type="range" min="-4" max="4" step=".01" value="' + controls.cutoffCv + '"><output>' + controls.cutoffCv.toFixed(2) + ' V</output></label></section>';
+  }
+  if (moduleId === 'envelope') {
+    return '<section class="patch-rack-controls"><h4>Controls</h4>' + liveLabel +
+      '<label>Envelope CV output <input data-live-envelope-cv type="range" min="0" max="5" step=".01" value="' + envelopeValue + '"><output>' + envelopeValue.toFixed(2) + ' V</output></label></section>';
+  }
+  if (moduleId === 'vca-mixer') {
+    return '<section class="patch-rack-controls"><h4>Controls</h4>' + liveLabel +
+      '<label>Output level <input data-full-voice-level type="range" min="0" max=".16" step=".01" value="' + controls.level + '"><output>' + controls.level.toFixed(2) + '</output></label></section>';
+  }
+  return '<section class="patch-rack-controls unavailable"><h4>Controls</h4><p>No shared live control yet. This module remains fully patchable; its detailed Lab is still the working teaching surface.</p></section>';
+}
+
+function rackMarkup(sourceEndpointId: PortEndpointId | undefined, destinationEndpointId: PortEndpointId | undefined, controls: FullSynthVoiceControls, envelopeValue: number): string {
+  return listPatchCanvasRackModules().map((module) => {
+    const route = moduleRoutes.get(module.moduleId);
+    const inputs = module.inputs.length
+      ? module.inputs.map((port) => portButtonMarkup(port, 'input', destinationEndpointId)).join('')
+      : '<p class="patch-rack-empty">No declared inputs</p>';
+    const outputs = module.outputs.length
+      ? module.outputs.map((port) => portButtonMarkup(port, 'output', sourceEndpointId)).join('')
+      : '<p class="patch-rack-empty">No declared outputs</p>';
+    return '<article class="patch-rack-module" data-patch-module="' + module.moduleId + '">' +
+      '<header><span class="patch-rack-number">M' + String(module.moduleNumber).padStart(2, '0') + '</span><div><h3>' + module.moduleTitle + '</h3><p>' + (route ? 'Patch points and detailed controls' : 'Explicit signal-representation bridge') + '</p></div></header>' +
+      '<div class="patch-rack-ports"><section><h4>Inputs</h4>' + inputs + '</section><section><h4>Outputs</h4>' + outputs + '</section></div>' +
+      moduleControlsMarkup(module.moduleId, controls, envelopeValue) +
+      (route ? '<a class="patch-rack-lab-link" href="' + route + '">Open detailed Lab</a>' : '') +
+      '</article>';
+  }).join('');
 }
 
 function sourceId(value: string): PortEndpointId | undefined {
@@ -107,24 +151,28 @@ function fullSynthVoiceMarkup(state: PatchState, runtime: LiveSignalRuntimeState
     ? '<p class="patch-canvas-status ready">Complete real cable set: this reference voice can now start.</p>'
     : '<p class="patch-canvas-boundary"><b>Still needed:</b> ' + plan.missingCables.map((cable) => cable.label).join('; ') + '.</p>';
   const actions = plan.ready
-    ? '<div class="full-synth-voice-controls"><label>Waveform<select data-full-voice-waveform><option value="sawtooth">Saw</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sine">Sine</option></select></label><label>Pitch CV <input data-full-voice-pitch type="range" min="-3" max="3" step=".01" value="' + controls.pitchCv + '"></label><label>Cutoff CV <input data-full-voice-cutoff type="range" min="-4" max="4" step=".01" value="' + controls.cutoffCv + '"></label><label>Envelope CV source <input data-live-envelope-cv type="range" min="0" max="5" step=".01" value="' + envelopeValue + '"></label><p class="patch-canvas-boundary"><b>Live Inspector:</b> Envelope output ' + (envelopeInspection?.range.value ?? 'not published') + ' V → VCA input ' + (deliveredValue ?? 'not connected') + ' V.</p><div class="button-row"><button type="button" data-full-voice-start>Start reference voice</button><button type="button" data-full-voice-note>Play short note</button><button type="button" data-full-voice-stop>Panic / stop</button></div></div>'
+    ? '<div class="full-synth-voice-controls"><p class="patch-canvas-boundary">Use the compact live controls on M03 Oscillator, M05 Filter, M06 Envelope and M07 VCA above. They share this monitor’s state.</p><p class="patch-canvas-boundary"><b>Live Inspector:</b> Envelope output ' + (envelopeInspection?.range.value ?? 'not published') + ' V → VCA input ' + (deliveredValue ?? 'not connected') + ' V.</p><div class="button-row"><button type="button" data-full-voice-start>Start reference voice</button><button type="button" data-full-voice-note>Play short note</button><button type="button" data-full-voice-stop>Panic / stop</button></div></div>'
     : '<button type="button" data-build-full-voice>Build these three real cables</button>';
+
   return '<section class="patch-canvas-learning panel full-synth-voice"><p class="eyebrow">Full Synth Voice v1.0 · real patch monitor</p><h3>Hear the patched audio and control paths</h3><p>This safe reference monitor is enabled only by the actual Connection Engine cables listed here.</p><ol class="full-synth-voice-cables">' + cables + '</ol>' + readiness + actions + '<p class="patch-canvas-boundary">The source is a bounded reference rendering of the declared Patch audio socket. It does not read or alter Module 06’s independently accepted controls.</p></section>';
 }
 
 export function mountPatchCanvas(root: HTMLElement): () => void {
-  root.innerHTML = '<section class="module-header"><div><p class="eyebrow">Modular Playground · Visual Patch Cables v1.0</p><h2>Plan and make a signal route</h2><p>Choose declared sockets, inspect their contract, then turn a direct route into a visible patch cable. The cable is real patch state, not an illustration.</p></div></section>' +
-    '<section class="patch-canvas-grid"><aside class="patch-canvas-controls panel"><h3>1. Choose sockets</h3><label>Output<select data-patch-canvas-source aria-label="Output socket"><option value="">Choose an output…</option>' +
-    optionList(listPatchCanvasOutputs()) + '</select></label><label>Input<select data-patch-canvas-destination aria-label="Input socket"><option value="">Choose an input…</option>' +
-    optionList(listPatchCanvasInputs()) + '</select></label><p class="patch-canvas-boundary">Direct routes can become cables. Routes needing range or representation adaptation stay unconnected. The reference voice below uses only its declared live Envelope → VCA delivery.</p></aside>' +
+  root.innerHTML = '<section class="module-header"><div><p class="eyebrow">Modular Playground · Full Synth Rack v1.0</p><h2>Patch the whole instrument</h2><p>Every declared module and socket is here at once. The current audible voice controls live on their own rack cards; unintegrated modules say so plainly.</p></div></section>' +
+    '<section class="patch-rack-intro panel"><h3>One visible rack</h3><p>The detailed Labs remain useful for slow learning. This is the instrument view: all nine modules, their patch points and the live patch evidence are kept together.</p><p class="patch-canvas-boundary">Click an <b>output</b> socket, then an <b>input</b> socket. Directly compatible routes can become cables; incompatible or adaptation-required routes stay explicit.</p></section>' +
+    '<section class="patch-canvas-rack" data-patch-canvas-rack aria-label="Voltage Lab modular synth rack"></section>' +
+    '<section class="patch-canvas-grid patch-canvas-instrument-grid"><aside class="patch-canvas-controls panel"><h3>Patch selection</h3><p data-patch-canvas-selection>Choose an output socket in the rack.</p><button type="button" data-patch-canvas-clear>Clear selection</button><p class="patch-canvas-boundary">The rack exposes every declared patch point. A module’s standalone detailed controls remain in its Lab until its real runtime has been integrated here.</p></aside>' +
     '<div class="patch-canvas-workbench" data-patch-canvas-workbench></div></section>';
 
-  const source = root.querySelector<HTMLSelectElement>('[data-patch-canvas-source]');
-  const destination = root.querySelector<HTMLSelectElement>('[data-patch-canvas-destination]');
+  const rack = root.querySelector<HTMLElement>('[data-patch-canvas-rack]');
+  const selection = root.querySelector<HTMLElement>('[data-patch-canvas-selection]');
+  const clear = root.querySelector<HTMLButtonElement>('[data-patch-canvas-clear]');
   const workbench = root.querySelector<HTMLElement>('[data-patch-canvas-workbench]');
-  if (!source || !destination || !workbench) throw new Error('Patch Canvas controls are missing.');
+  if (!rack || !selection || !clear || !workbench) throw new Error('Patch Canvas rack controls are missing.');
 
   let state = createPatchState();
+  let sourceEndpointId: PortEndpointId | undefined;
+  let destinationEndpointId: PortEndpointId | undefined;
   let message = '';
   let voice: BrowserFullSynthVoice | undefined;
   let voiceControls = normaliseFullSynthVoiceControls({ vcaCv: 0 });
@@ -142,17 +190,20 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
   };
   const render = () => {
     const proposal = createPatchCanvasProposal({
-      sourceEndpointId: sourceId(source.value),
-      destinationEndpointId: sourceId(destination.value),
+      sourceEndpointId,
+      destinationEndpointId,
     });
+    const envelopeValue = observeLiveSignal(runtime, 'envelope:envelope').value ?? 5;
+    rack.innerHTML = rackMarkup(sourceEndpointId, destinationEndpointId, voiceControls, envelopeValue);
+    selection.innerHTML = sourceEndpointId
+      ? (destinationEndpointId ? '<b>Route selected:</b> output → input. Review it below, then connect if directly compatible.' : '<b>Output selected.</b> Now choose an input socket.')
+      : 'Choose an output socket in the rack.';
     workbench.innerHTML = proposedRouteMarkup(proposal) + connectedCablesMarkup(state) + fullSynthVoiceMarkup(state, runtime, voiceControls) +
       '<section class="patch-canvas-learning panel"><h3>What this teaches</h3><p>An output is a source and an input is a destination. A solid cable with an arrow means Connection Engine has accepted a directly compatible route.</p><p>' +
       (message || 'No audio is routed here yet: this canvas makes the real patch state readable before audio integration.') + '</p></section>';
   };
 
   const connect = () => {
-    const sourceEndpointId = sourceId(source.value);
-    const destinationEndpointId = sourceId(destination.value);
     if (!sourceEndpointId || !destinationEndpointId) return;
     const result = connectPorts(state, sourceEndpointId, destinationEndpointId);
     state = result.state;
@@ -201,19 +252,52 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     if (target.matches('[data-full-voice-waveform]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, waveform: target.value as OscillatorType });
     if (target.matches('[data-full-voice-pitch]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, pitchCv: Number(target.value) });
     if (target.matches('[data-full-voice-cutoff]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, cutoffCv: Number(target.value) });
+    if (target.matches('[data-full-voice-level]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, level: Number(target.value) });
     if (target.matches('[data-live-envelope-cv]')) { publishEnvelope(Number(target.value)); render(); return; }
     voice?.setControls(voiceControls);
   };
 
-  source.addEventListener('change', render);
-  destination.addEventListener('change', render);
+  const selectSocket = (event: Event) => {
+    const target = event.target as HTMLElement;
+    const output = target.closest<HTMLElement>('[data-patch-canvas-output]');
+    if (output) {
+      sourceEndpointId = sourceId(output.dataset.patchCanvasOutput ?? '');
+      destinationEndpointId = undefined;
+      message = 'Output selected. Choose an input socket.';
+      render();
+      return;
+    }
+    const inputSocket = target.closest<HTMLElement>('[data-patch-canvas-input]');
+    if (!inputSocket) return;
+    if (!sourceEndpointId) {
+      message = 'Choose an output socket before an input socket.';
+      render();
+      return;
+    }
+    destinationEndpointId = sourceId(inputSocket.dataset.patchCanvasInput ?? '');
+    message = 'Route selected. Read the compatibility result below.';
+    render();
+  };
+  const clearSelection = () => {
+    sourceEndpointId = undefined;
+    destinationEndpointId = undefined;
+    message = 'Patch selection cleared.';
+    render();
+  };
+
+  rack.addEventListener('click', selectSocket);
+  rack.addEventListener('input', input);
+  rack.addEventListener('change', input);
+  clear.addEventListener('click', clearSelection);
   workbench.addEventListener('click', click);
   workbench.addEventListener('input', input);
   workbench.addEventListener('change', input);
   render();
   return () => {
-    source.removeEventListener('change', render);
-    destination.removeEventListener('change', render);
+    rack.removeEventListener('click', selectSocket);
+    rack.removeEventListener('input', input);
+    rack.removeEventListener('change', input);
+    clear.removeEventListener('click', clearSelection);
     workbench.removeEventListener('click', click);
     workbench.removeEventListener('input', input);
     workbench.removeEventListener('change', input);
