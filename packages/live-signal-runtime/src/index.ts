@@ -4,7 +4,7 @@ import {
   type SignalDelivery,
   type SignalFrame,
 } from '../../connection-engine/src/index';
-import { PORT_CONTRACTS, type ModulePortContract, type PortEndpointId } from '../../port-contracts/src/index';
+import { ALL_PORT_CONTRACTS, type ModulePortContract, type PortEndpointId } from '../../port-contracts/src/index';
 import type { SignalObservation } from '../../signal-inspector/src/index';
 
 export const LIVE_SIGNAL_RUNTIME_VERSION = '1.0' as const;
@@ -45,7 +45,7 @@ export function publishSignal(
   state: LiveSignalRuntimeState,
   patch: PatchState,
   frame: SignalFrame,
-  ports: readonly ModulePortContract[] = PORT_CONTRACTS,
+  ports: readonly ModulePortContract[] = ALL_PORT_CONTRACTS,
 ): PublishSignalResult {
   const source = findPort(frame.sourceEndpointId, ports);
   if (!source || source.direction !== 'output') {

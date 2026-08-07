@@ -1,5 +1,5 @@
 import type { ConnectionId, PatchState } from '../../connection-engine/src/index';
-import { PORT_CONTRACTS, type ModulePortContract, type PortEndpointId } from '../../port-contracts/src/index';
+import { ALL_PORT_CONTRACTS, type ModulePortContract, type PortEndpointId } from '../../port-contracts/src/index';
 
 export const VISUAL_PATCH_CABLES_VERSION = '1.0' as const;
 
@@ -33,7 +33,7 @@ function findPort(endpointId: PortEndpointId, ports: readonly ModulePortContract
  */
 export function visualisePatchState(
   state: PatchState,
-  ports: readonly ModulePortContract[] = PORT_CONTRACTS,
+  ports: readonly ModulePortContract[] = ALL_PORT_CONTRACTS,
 ): VisualPatchCableView {
   const cables: VisualPatchCable[] = [];
   const problems: VisualPatchCableProblem[] = [];

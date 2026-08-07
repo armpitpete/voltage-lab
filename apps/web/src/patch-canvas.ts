@@ -16,11 +16,14 @@ import { BrowserFullSynthVoice } from '../../../packages/full-synth-voice/src/br
 import {
   normaliseFullSynthVoiceControls,
   planFullSynthVoice,
+  planFullSynthVoiceSource,
   REQUIRED_VOICE_CABLES,
   type FullSynthVoiceControls,
 } from '../../../packages/full-synth-voice/src/index';
 import { createLiveSignalRuntime, observeLiveSignal, publishSignal, type LiveSignalRuntimeState } from '../../../packages/live-signal-runtime/src/index';
 import { inspectSignal } from '../../../packages/signal-inspector/src/index';
+import { readOscillatorOutput } from '../../../packages/oscillator-output-runtime/src/index';
+import { createBrowserAudioSource, type BrowserAudioSource } from '../../../packages/browser-audio-boundary/src/index';
 import type { ModulePortContract, PortEndpointId } from '../../../packages/port-contracts/src/index';
 
 function endpointLabel(port: ModulePortContract): string {
@@ -94,8 +97,9 @@ function connectedCablesMarkup(state: PatchState): string {
     '</section>';
 }
 
-function fullSynthVoiceMarkup(state: PatchState, runtime: LiveSignalRuntimeState, controls: FullSynthVoiceControls): string {
+function fullSynthVoiceMarkup(state: PatchState, runtime: LiveSignalRuntimeState, controls: FullSynthVoiceControls, source: BrowserAudioSource | undefined): string {
   const plan = planFullSynthVoice(state);
+  const sourcePlan = planFullSynthVoiceSource(source);
   const envelopeInspection = inspectSignal(observeLiveSignal(runtime, 'envelope:envelope'));
   const vcaInspection = inspectSignal(observeLiveSignal(runtime, 'vca-mixer:vca-cv'));
   const envelopeValue = envelopeInspection?.range.value ?? 5;
@@ -106,10 +110,12 @@ function fullSynthVoiceMarkup(state: PatchState, runtime: LiveSignalRuntimeState
   const readiness = plan.ready
     ? '<p class="patch-canvas-status ready">Complete real cable set: this reference voice can now start.</p>'
     : '<p class="patch-canvas-boundary"><b>Still needed:</b> ' + plan.missingCables.map((cable) => cable.label).join('; ') + '.</p>';
-  const actions = plan.ready
-    ? '<div class="full-synth-voice-controls"><label>Waveform<select data-full-voice-waveform><option value="sawtooth">Saw</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sine">Sine</option></select></label><label>Pitch CV <input data-full-voice-pitch type="range" min="-3" max="3" step=".01" value="' + controls.pitchCv + '"></label><label>Cutoff CV <input data-full-voice-cutoff type="range" min="-4" max="4" step=".01" value="' + controls.cutoffCv + '"></label><label>Envelope CV source <input data-live-envelope-cv type="range" min="0" max="5" step=".01" value="' + envelopeValue + '"></label><p class="patch-canvas-boundary"><b>Live Inspector:</b> Envelope output ' + (envelopeInspection?.range.value ?? 'not published') + ' V → VCA input ' + (deliveredValue ?? 'not connected') + ' V.</p><div class="button-row"><button type="button" data-full-voice-start>Start reference voice</button><button type="button" data-full-voice-note>Play short note</button><button type="button" data-full-voice-stop>Panic / stop</button></div></div>'
-    : '<button type="button" data-build-full-voice>Build these three real cables</button>';
-  return '<section class="patch-canvas-learning panel full-synth-voice"><p class="eyebrow">Full Synth Voice v1.0 · real patch monitor</p><h3>Hear the patched audio and control paths</h3><p>This safe reference monitor is enabled only by the actual Connection Engine cables listed here.</p><ol class="full-synth-voice-cables">' + cables + '</ol>' + readiness + actions + '<p class="patch-canvas-boundary">The source is a bounded reference rendering of the declared Patch audio socket. It does not read or alter Module 06’s independently accepted controls.</p></section>';
+  const actions = plan.ready && sourcePlan.ready
+    ? '<div class="full-synth-voice-controls"><p class="patch-canvas-boundary"><b>Module 03 source:</b> ' + sourcePlan.reason + ' Browser boundary peak: ' + source?.normalisedPeak.toFixed(2) + '.</p><label>Cutoff CV <input data-full-voice-cutoff type="range" min="-4" max="4" step=".01" value="' + controls.cutoffCv + '"></label><label>Envelope CV source <input data-live-envelope-cv type="range" min="0" max="5" step=".01" value="' + envelopeValue + '"></label><p class="patch-canvas-boundary"><b>Live Inspector:</b> Envelope output ' + (envelopeInspection?.range.value ?? 'not published') + ' V → VCA input ' + (deliveredValue ?? 'not connected') + ' V.</p><div class="button-row"><button type="button" data-full-voice-start>Start Module 03 source</button><button type="button" data-full-voice-note>Play short note</button><button type="button" data-full-voice-stop>Panic / stop</button></div></div>'
+    : plan.ready
+      ? '<p class="patch-canvas-boundary">' + sourcePlan.reason + ' <a href="#/oscillator">Open Oscillator Lab</a>.</p>'
+    : '<button type="button" data-build-full-voice>Build these four real cables</button>';
+  return '<section class="patch-canvas-learning panel full-synth-voice"><p class="eyebrow">Full Synth Voice v1.0 · real patch monitor</p><h3>Hear the patched audio and control paths</h3><p>This safe monitor uses Module 03’s published source configuration only through the explicit Browser Audio Boundary.</p><ol class="full-synth-voice-cables">' + cables + '</ol>' + readiness + actions + '<p class="patch-canvas-boundary">The browser re-renders the published Module 03 configuration; it does not transport Module 03’s original AudioNode between routes.</p></section>';
 }
 
 export function mountPatchCanvas(root: HTMLElement): () => void {
@@ -129,6 +135,21 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
   let voice: BrowserFullSynthVoice | undefined;
   let voiceControls = normaliseFullSynthVoiceControls({ vcaCv: 0 });
   let runtime = createLiveSignalRuntime();
+  const browserSource = () => {
+    const output = readOscillatorOutput();
+    return output ? createBrowserAudioSource(output) : undefined;
+  };
+  const publishOscillatorBoundary = () => {
+    const output = readOscillatorOutput();
+    if (!output) return;
+    const source = createBrowserAudioSource(output);
+    runtime = publishSignal(runtime, state, {
+      sourceEndpointId: 'oscillator:waveform', signalType: 'audio', value: output.amplitudeVolts, observedAt: output.observedAt,
+    }).state;
+    runtime = publishSignal(runtime, state, {
+      sourceEndpointId: 'browser-audio-boundary:normalised-output', signalType: 'audio', value: source.normalisedPeak, observedAt: output.observedAt,
+    }).state;
+  };
   const publishEnvelope = (value: number) => {
     const result = publishSignal(runtime, state, {
       sourceEndpointId: 'envelope:envelope', signalType: 'cv', value, observedAt: Date.now(),
@@ -145,7 +166,7 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
       sourceEndpointId: sourceId(source.value),
       destinationEndpointId: sourceId(destination.value),
     });
-    workbench.innerHTML = proposedRouteMarkup(proposal) + connectedCablesMarkup(state) + fullSynthVoiceMarkup(state, runtime, voiceControls) +
+    workbench.innerHTML = proposedRouteMarkup(proposal) + connectedCablesMarkup(state) + fullSynthVoiceMarkup(state, runtime, voiceControls, browserSource()) +
       '<section class="patch-canvas-learning panel"><h3>What this teaches</h3><p>An output is a source and an input is a destination. A solid cable with an arrow means Connection Engine has accepted a directly compatible route.</p><p>' +
       (message || 'No audio is routed here yet: this canvas makes the real patch state readable before audio integration.') + '</p></section>';
   };
@@ -167,7 +188,8 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
       state = result.state;
       if (result.status === 'rejected') { message = result.reason; render(); return; }
     }
-    message = planFullSynthVoice(state).ready ? 'The three real cables are connected. The Full Synth Voice reference monitor is ready.' : 'The voice patch could not be completed.';
+    message = planFullSynthVoice(state).ready ? 'The four real cables are connected. The Module 03 voice monitor is ready.' : 'The voice patch could not be completed.';
+    publishOscillatorBoundary();
     publishEnvelope(observeLiveSignal(runtime, 'envelope:envelope').value ?? 5);
     render();
   };
@@ -176,8 +198,9 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     const target = event.target as HTMLElement;
     if (target.closest('[data-build-full-voice]')) { buildFullVoicePatch(); return; }
     if (target.closest('[data-full-voice-start]')) {
-      if (!planFullSynthVoice(state).ready || voice) return;
-      void BrowserFullSynthVoice.start(voiceControls).then((started) => { voice = started; message = 'Reference voice started from the real cable set.'; render(); });
+      const source = browserSource();
+      if (!planFullSynthVoice(state).ready || !source || voice) return;
+      void BrowserFullSynthVoice.start(voiceControls, source).then((started) => { voice = started; message = 'Module 03 source started through the real cable set and explicit browser boundary.'; render(); });
       return;
     }
     if (target.closest('[data-full-voice-note]')) { voice?.gate(true); window.setTimeout(() => voice?.gate(false), 360); return; }
@@ -191,6 +214,7 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     const result = disconnectPort(state, remove.dataset.patchCanvasDisconnect as ConnectionId);
     state = result.state;
     if (!planFullSynthVoice(state).ready) stopVoice();
+    publishOscillatorBoundary();
     publishEnvelope(observeLiveSignal(runtime, 'envelope:envelope').value ?? 5);
     message = result.reason;
     render();
@@ -198,8 +222,6 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
 
   const input = (event: Event) => {
     const target = event.target as HTMLInputElement | HTMLSelectElement;
-    if (target.matches('[data-full-voice-waveform]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, waveform: target.value as OscillatorType });
-    if (target.matches('[data-full-voice-pitch]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, pitchCv: Number(target.value) });
     if (target.matches('[data-full-voice-cutoff]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, cutoffCv: Number(target.value) });
     if (target.matches('[data-live-envelope-cv]')) { publishEnvelope(Number(target.value)); render(); return; }
     voice?.setControls(voiceControls);

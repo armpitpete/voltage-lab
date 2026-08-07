@@ -7,6 +7,7 @@ import type {
   VoltageLabModuleDeclaration,
 } from '../../module-interface/src/index';
 import { getSignalSpecification, type SignalType } from '../../signal-spec/src/index';
+import { normalisedAudioRange, voltageRange } from '../../module-interface/src/index';
 
 export const PORT_CONTRACT_VERSION = '1.0' as const;
 
@@ -68,8 +69,29 @@ export function buildModulePortContracts(
 
 export const PORT_CONTRACTS = buildModulePortContracts();
 
+/** Infrastructure sockets are not a tenth teaching module. They make the one approved
+ * conceptual-voltage → browser-audio conversion visible and patchable. */
+export const BROWSER_AUDIO_BOUNDARY_PORTS: readonly ModulePortContract[] = [
+  {
+    version: PORT_CONTRACT_VERSION, endpointId: 'browser-audio-boundary:oscillator-input',
+    moduleId: 'browser-audio-boundary', moduleNumber: 0, moduleTitle: 'Browser Audio Boundary',
+    portId: 'oscillator-input', label: 'Oscillator input', direction: 'input', signalType: 'audio',
+    range: voltageRange(-10, 10),
+    purpose: 'Receives the conceptual ±10 V oscillator waveform before explicit browser-audio conversion.',
+  },
+  {
+    version: PORT_CONTRACT_VERSION, endpointId: 'browser-audio-boundary:normalised-output',
+    moduleId: 'browser-audio-boundary', moduleNumber: 0, moduleTitle: 'Browser Audio Boundary',
+    portId: 'normalised-output', label: 'Normalised audio', direction: 'output', signalType: 'audio',
+    range: normalisedAudioRange(),
+    purpose: 'Browser-normalised -1 to 1 audio after the explicit ±10 V boundary.',
+  },
+] as const;
+
+export const ALL_PORT_CONTRACTS: readonly ModulePortContract[] = [...PORT_CONTRACTS, ...BROWSER_AUDIO_BOUNDARY_PORTS];
+
 export function findPortContract(moduleId: string, portId: string): ModulePortContract | undefined {
-  return PORT_CONTRACTS.find((port) => port.moduleId === moduleId && port.portId === portId);
+  return ALL_PORT_CONTRACTS.find((port) => port.moduleId === moduleId && port.portId === portId);
 }
 
 function isEventSignal(type: SignalType): boolean {
@@ -156,7 +178,7 @@ export function evaluatePortCompatibility(
 }
 
 export function validatePortContracts(
-  contracts: readonly ModulePortContract[] = PORT_CONTRACTS,
+  contracts: readonly ModulePortContract[] = ALL_PORT_CONTRACTS,
 ): PortContractProblem[] {
   const problems: PortContractProblem[] = [];
   const endpointIds = new Set<string>();
