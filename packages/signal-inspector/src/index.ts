@@ -1,5 +1,5 @@
 import { getSignalSpecification, type SignalDomain } from '../../signal-spec/src/index';
-import { PORT_CONTRACTS, type ModulePortContract, type PortEndpointId } from '../../port-contracts/src/index';
+import { ALL_PORT_CONTRACTS, type ModulePortContract, type PortEndpointId } from '../../port-contracts/src/index';
 
 export const SIGNAL_INSPECTOR_VERSION = '1.0' as const;
 
@@ -42,7 +42,7 @@ export type SignalInspection = {
 };
 
 function findPort(endpointId: PortEndpointId): ModulePortContract | undefined {
-  return PORT_CONTRACTS.find((port) => port.endpointId === endpointId);
+  return ALL_PORT_CONTRACTS.find((port) => port.endpointId === endpointId);
 }
 
 function findDomain(port: ModulePortContract): SignalDomain {
