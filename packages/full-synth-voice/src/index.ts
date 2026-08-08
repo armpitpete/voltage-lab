@@ -3,9 +3,13 @@ import type { BrowserAudioSource } from '../../browser-audio-boundary/src/index'
 
 export const FULL_SYNTH_VOICE_VERSION = '1.0' as const;
 
+export type FullSynthVoiceWaveform = OscillatorType | 'pulse';
+
 export type FullSynthVoiceControls = {
-  waveform: OscillatorType;
+  waveform: FullSynthVoiceWaveform;
   pitchCv: number;
+  sourceAmplitudeVolts: number;
+  pulseWidth: number;
   cutoffCv: number;
   vcaCv: number;
   level: number;
@@ -58,7 +62,7 @@ export const REQUIRED_VOICE_CABLES: readonly RequiredVoiceCable[] = [
   },
 ] as const;
 
-const WAVEFORMS: readonly OscillatorType[] = ['sine', 'square', 'sawtooth', 'triangle'];
+const WAVEFORMS: readonly FullSynthVoiceWaveform[] = ['sine', 'square', 'sawtooth', 'triangle', 'pulse'];
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, Number.isFinite(value) ? value : minimum));
@@ -68,8 +72,10 @@ export function normaliseFullSynthVoiceControls(
   controls: Partial<FullSynthVoiceControls> = {},
 ): FullSynthVoiceControls {
   return {
-    waveform: WAVEFORMS.includes(controls.waveform as OscillatorType) ? controls.waveform as OscillatorType : 'sawtooth',
+    waveform: WAVEFORMS.includes(controls.waveform as FullSynthVoiceWaveform) ? controls.waveform as FullSynthVoiceWaveform : 'sawtooth',
     pitchCv: clamp(controls.pitchCv ?? 0, -3, 3),
+    sourceAmplitudeVolts: clamp(controls.sourceAmplitudeVolts ?? 2.5, 0, 5),
+    pulseWidth: clamp(controls.pulseWidth ?? 0.5, 0.05, 0.95),
     cutoffCv: clamp(controls.cutoffCv ?? 0, -4, 4),
     vcaCv: clamp(controls.vcaCv ?? 5, 0, 5),
     level: clamp(controls.level ?? 0.12, 0, 0.16),
@@ -117,6 +123,6 @@ export function planFullSynthVoice(state: PatchState): FullSynthVoicePlan {
 
 export function planFullSynthVoiceSource(source: BrowserAudioSource | undefined): FullSynthVoiceSourcePlan {
   return source
-    ? { ready: true, reason: `Module 03 source: ${source.waveform}, ${source.frequencyHz.toFixed(1)} Hz, ±${source.sourcePeakVolts.toFixed(1)} V.` }
-    : { ready: false, reason: 'Open Module 03 Oscillator Lab first so it can publish its actual current source configuration.' };
+    ? { ready: true, reason: `M03 source: ${source.waveform}, ${source.frequencyHz.toFixed(1)} Hz, ±${source.sourcePeakVolts.toFixed(1)} V.` }
+    : { ready: false, reason: 'Use the M03 source button in Patch Canvas, or open Oscillator Lab, to publish an explicit source configuration.' };
 }
