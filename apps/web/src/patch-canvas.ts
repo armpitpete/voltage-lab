@@ -37,16 +37,22 @@ function portButtonMarkup(port: ModulePortContract, role: 'input' | 'output', se
     '<span class="patch-rack-jack" aria-hidden="true"></span><span><b>' + port.label + '</b><small>' + port.signalType + ' · ' + port.range.minimum + ' to ' + port.range.maximum + ' ' + port.range.unit + '</small></span></button>';
 }
 
-function moduleControlsMarkup(moduleId: string, controls: FullSynthVoiceControls, envelopeValue: number): string {
+function moduleControlsMarkup(moduleId: string, controls: FullSynthVoiceControls, envelopeValue: number, sourceActive: boolean): string {
   const liveLabel = '<p class="patch-rack-control-status"><b>Live voice control</b> · shared with the safe monitor below.</p>';
   if (moduleId === 'oscillator') {
-    const waveformOptions = ['sawtooth', 'square', 'triangle', 'sine'].map((waveform) =>
+    const waveformOptions = ['sawtooth', 'square', 'triangle', 'sine', 'pulse'].map((waveform) =>
       '<option value="' + waveform + '"' + (controls.waveform === waveform ? ' selected' : '') + '>' +
-      ({ sawtooth: 'Saw', square: 'Square', triangle: 'Triangle', sine: 'Sine' } as Record<string, string>)[waveform] + '</option>',
+      ({ sawtooth: 'Saw', square: 'Square', triangle: 'Triangle', sine: 'Sine', pulse: 'Pulse' } as Record<string, string>)[waveform] + '</option>',
     ).join('');
-    return '<section class="patch-rack-controls"><h4>Controls</h4>' + liveLabel +
+    const sourceState = sourceActive
+      ? '<p class="patch-rack-control-status"><b>M03 source active</b> · its visible settings feed the Browser Audio Boundary.</p>'
+      : '<p class="patch-rack-control-status">No source is active. Publish these visible M03 settings before starting the patch voice.</p>';
+    return '<section class="patch-rack-controls"><h4>Controls</h4>' + liveLabel + sourceState +
       '<label>Waveform <select data-full-voice-waveform>' + waveformOptions + '</select></label>' +
-      '<label>Pitch CV <input data-full-voice-pitch type="range" min="-3" max="3" step=".01" value="' + controls.pitchCv + '"><output>' + controls.pitchCv.toFixed(2) + ' V</output></label></section>';
+      '<label>Pitch CV <input data-full-voice-pitch type="range" min="-3" max="3" step=".01" value="' + controls.pitchCv + '"><output>' + controls.pitchCv.toFixed(2) + ' V</output></label>' +
+      '<label>Amplitude <input data-full-voice-amplitude type="range" min="0" max="5" step=".1" value="' + controls.sourceAmplitudeVolts + '"><output>±' + controls.sourceAmplitudeVolts.toFixed(1) + ' V</output></label>' +
+      '<label>Pulse width <input data-full-voice-pulse-width type="range" min=".05" max=".95" step=".01" value="' + controls.pulseWidth + '"><output>' + Math.round(controls.pulseWidth * 100) + '%</output></label>' +
+      '<button type="button" data-full-voice-publish-source>' + (sourceActive ? 'Refresh M03 patch source' : 'Use as M03 patch source') + '</button></section>';
   }
   if (moduleId === 'filter') {
     return '<section class="patch-rack-controls"><h4>Controls</h4>' + liveLabel +
@@ -63,7 +69,7 @@ function moduleControlsMarkup(moduleId: string, controls: FullSynthVoiceControls
   return '<section class="patch-rack-controls unavailable"><h4>Controls</h4><p>No shared live control yet. This module remains fully patchable; its detailed Lab is still the working teaching surface.</p></section>';
 }
 
-function rackMarkup(sourceEndpointId: PortEndpointId | undefined, destinationEndpointId: PortEndpointId | undefined, rejectedDestinationEndpointId: PortEndpointId | undefined, controls: FullSynthVoiceControls, envelopeValue: number): string {
+function rackMarkup(sourceEndpointId: PortEndpointId | undefined, destinationEndpointId: PortEndpointId | undefined, rejectedDestinationEndpointId: PortEndpointId | undefined, controls: FullSynthVoiceControls, envelopeValue: number, sourceActive: boolean): string {
   return listPatchCanvasRackModules().map((module) => {
     const route = moduleRoutes.get(module.moduleId);
     const inputs = module.inputs.length
@@ -75,7 +81,7 @@ function rackMarkup(sourceEndpointId: PortEndpointId | undefined, destinationEnd
     return '<article class="patch-rack-module" data-patch-module="' + module.moduleId + '">' +
       '<header><span class="patch-rack-number">M' + String(module.moduleNumber).padStart(2, '0') + '</span><div><h3>' + module.moduleTitle + '</h3><p>' + (route ? 'Patch points and detailed controls' : 'Explicit signal-representation bridge') + '</p></div></header>' +
       '<div class="patch-rack-ports"><section><h4>Inputs</h4>' + inputs + '</section><section><h4>Outputs</h4>' + outputs + '</section></div>' +
-      moduleControlsMarkup(module.moduleId, controls, envelopeValue) +
+      moduleControlsMarkup(module.moduleId, controls, envelopeValue, sourceActive) +
       (route ? '<a class="patch-rack-lab-link" href="' + route + '">Open detailed Lab</a>' : '') +
       '</article>';
   }).join('');
@@ -88,6 +94,7 @@ function sourceId(value: string): PortEndpointId | undefined {
 function browserWaveformForControl(waveform: FullSynthVoiceControls['waveform']): BrowserAudioSource['waveform'] {
   switch (waveform) {
     case 'sawtooth': return 'saw';
+    case 'pulse': return 'pulse';
     case 'sine':
     case 'square':
     case 'triangle': return waveform;
@@ -202,15 +209,22 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     const output = readOscillatorOutput();
     return canvasOscillatorSource ?? (output ? createBrowserAudioSource(output) : undefined);
   };
+  const canvasSourceFromControls = (): BrowserAudioSource => createBrowserAudioSource({
+    version: '1.0',
+    waveform: browserWaveformForControl(voiceControls.waveform),
+    frequencyHz: pitchCvToFrequency(voiceControls.pitchCv),
+    amplitudeVolts: voiceControls.sourceAmplitudeVolts,
+    pulseWidth: voiceControls.pulseWidth,
+    observedAt: Date.now(),
+  });
   const publishOscillatorBoundary = () => {
-    const output = readOscillatorOutput();
-    if (!output) return;
-    const source = createBrowserAudioSource(output);
+    const source = browserSource();
+    if (!source) return;
     runtime = publishSignal(runtime, state, {
-      sourceEndpointId: 'oscillator:waveform', signalType: 'audio', value: output.amplitudeVolts, observedAt: output.observedAt,
+      sourceEndpointId: 'oscillator:waveform', signalType: 'audio', value: source.sourcePeakVolts, observedAt: source.observedAt,
     }).state;
     runtime = publishSignal(runtime, state, {
-      sourceEndpointId: 'browser-audio-boundary:normalised-output', signalType: 'audio', value: source.normalisedPeak, observedAt: output.observedAt,
+      sourceEndpointId: 'browser-audio-boundary:normalised-output', signalType: 'audio', value: source.normalisedPeak, observedAt: source.observedAt,
     }).state;
   };
   const drawEndpointCables = () => {
@@ -254,7 +268,7 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
       destinationEndpointId,
     });
     const envelopeValue = observeLiveSignal(runtime, 'envelope:envelope').value ?? 5;
-    rack.innerHTML = rackMarkup(sourceEndpointId, destinationEndpointId, rejectedDestinationEndpointId, voiceControls, envelopeValue);
+    rack.innerHTML = rackMarkup(sourceEndpointId, destinationEndpointId, rejectedDestinationEndpointId, voiceControls, envelopeValue, Boolean(canvasOscillatorSource));
     selection.innerHTML = sourceEndpointId
       ? '<b>Output selected.</b> Choose an input socket. A directly compatible target connects immediately.'
       : (message ? '<b>Patch status:</b> ' + message : 'Choose an output socket in the rack.');
@@ -317,28 +331,30 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
 
   const input = (event: Event) => {
     const target = event.target as HTMLInputElement | HTMLSelectElement;
-    if (target.matches('[data-full-voice-waveform]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, waveform: target.value as OscillatorType });
+    if (target.matches('[data-full-voice-waveform]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, waveform: target.value as FullSynthVoiceControls['waveform'] });
     if (target.matches('[data-full-voice-pitch]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, pitchCv: Number(target.value) });
+    if (target.matches('[data-full-voice-amplitude]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, sourceAmplitudeVolts: Number(target.value) });
+    if (target.matches('[data-full-voice-pulse-width]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, pulseWidth: Number(target.value) });
     if (target.matches('[data-full-voice-cutoff]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, cutoffCv: Number(target.value) });
     if (target.matches('[data-full-voice-level]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, level: Number(target.value) });
     if (target.matches('[data-live-envelope-cv]')) { publishEnvelope(Number(target.value)); render(); return; }
-    if (target.matches('[data-full-voice-waveform], [data-full-voice-pitch]')) {
-      const source = browserSource();
-      if (source) {
-        canvasOscillatorSource = {
-          ...source,
-          waveform: browserWaveformForControl(voiceControls.waveform),
-          frequencyHz: pitchCvToFrequency(voiceControls.pitchCv),
-          observedAt: Date.now(),
-        };
-        voice?.setOscillatorSource(canvasOscillatorSource);
-      }
+    if (target.matches('[data-full-voice-waveform], [data-full-voice-pitch], [data-full-voice-amplitude], [data-full-voice-pulse-width]') && canvasOscillatorSource) {
+      canvasOscillatorSource = canvasSourceFromControls();
+      publishOscillatorBoundary();
+      voice?.setOscillatorSource(canvasOscillatorSource);
     }
     voice?.setControls(voiceControls);
   };
 
   const selectSocket = (event: Event) => {
     const target = event.target as HTMLElement;
+    if (target.closest('[data-full-voice-publish-source]')) {
+      canvasOscillatorSource = canvasSourceFromControls();
+      publishOscillatorBoundary();
+      message = 'M03 source published from its Patch Canvas controls. It is ready for the explicit Browser Audio Boundary.';
+      render();
+      return;
+    }
     const output = target.closest<HTMLElement>('[data-patch-canvas-output]');
     if (output) {
       sourceEndpointId = sourceId(output.dataset.patchCanvasOutput ?? '');
