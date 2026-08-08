@@ -197,9 +197,10 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
   let voice: BrowserFullSynthVoice | undefined;
   let voiceControls = normaliseFullSynthVoiceControls({ vcaCv: 0 });
   let runtime = createLiveSignalRuntime();
+  let canvasOscillatorSource: BrowserAudioSource | undefined;
   const browserSource = () => {
     const output = readOscillatorOutput();
-    return output ? createBrowserAudioSource(output) : undefined;
+    return canvasOscillatorSource ?? (output ? createBrowserAudioSource(output) : undefined);
   };
   const publishOscillatorBoundary = () => {
     const output = readOscillatorOutput();
@@ -320,12 +321,15 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     if (target.matches('[data-live-envelope-cv]')) { publishEnvelope(Number(target.value)); render(); return; }
     if (target.matches('[data-full-voice-waveform], [data-full-voice-pitch]')) {
       const source = browserSource();
-      if (source) voice?.setOscillatorSource({
-        ...source,
-        waveform: browserWaveformForControl(voiceControls.waveform),
-        frequencyHz: pitchCvToFrequency(voiceControls.pitchCv),
-        observedAt: Date.now(),
-      });
+      if (source) {
+        canvasOscillatorSource = {
+          ...source,
+          waveform: browserWaveformForControl(voiceControls.waveform),
+          frequencyHz: pitchCvToFrequency(voiceControls.pitchCv),
+          observedAt: Date.now(),
+        };
+        voice?.setOscillatorSource(canvasOscillatorSource);
+      }
     }
     voice?.setControls(voiceControls);
   };
