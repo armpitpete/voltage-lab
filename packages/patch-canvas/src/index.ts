@@ -47,7 +47,7 @@ export type PatchCanvasProposal = {
 };
 
 function findPort(endpointId: PortEndpointId | undefined): ModulePortContract | undefined {
-  return endpointId ? PORT_CONTRACTS.find((port) => port.endpointId === endpointId) : undefined;
+  return endpointId ? ALL_PORT_CONTRACTS.find((port) => port.endpointId === endpointId) : undefined;
 }
 
 function routeFor(
