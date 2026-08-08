@@ -39,9 +39,10 @@ describe('Full Synth Voice v1.0', () => {
   });
 
   it('keeps reference-voice controls bounded and meaningful', () => {
-    expect(normaliseFullSynthVoiceControls({ waveform: 'invalid' as OscillatorType, pitchCv: 99, cutoffCv: -99, vcaCv: 9, level: 1 })).toEqual({
-      waveform: 'sawtooth', pitchCv: 3, cutoffCv: -4, vcaCv: 5, level: 0.16,
+    expect(normaliseFullSynthVoiceControls({ waveform: 'invalid' as OscillatorType, pitchCv: 99, sourceAmplitudeVolts: 9, pulseWidth: 2, cutoffCv: -99, vcaCv: 9, level: 1 })).toEqual({
+      waveform: 'sawtooth', pitchCv: 3, sourceAmplitudeVolts: 5, pulseWidth: 0.95, cutoffCv: -4, vcaCv: 5, level: 0.16,
     });
+    expect(normaliseFullSynthVoiceControls({ waveform: 'pulse', pulseWidth: 0.3 })).toMatchObject({ waveform: 'pulse', pulseWidth: 0.3 });
     expect(pitchCvToFrequency(1)).toBeCloseTo(220);
     expect(cutoffCvToFrequency(-99)).toBe(60);
     expect(vcaCvToGain(2.5, 0.12)).toBeCloseTo(0.06);
