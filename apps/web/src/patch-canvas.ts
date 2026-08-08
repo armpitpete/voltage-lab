@@ -230,7 +230,7 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
       if (!start || !end) return '';
       const direction = end.x >= start.x ? 1 : -1;
       const bend = Math.max(42, Math.min(180, Math.abs(end.x - start.x) * .35));
-      return '<path class="patch-rack-cable ' + cable.signalType + '" d="M ' + start.x + ' ' + start.y + ' C ' + (start.x + (direction * bend)) + ' ' + start.y + ', ' + (end.x - (direction * bend)) + ' ' + end.y + ', ' + end.x + ' ' + end.y + '" marker-end="url(#patch-rack-cable-arrow)"/>';
+      return '<path class="patch-rack-cable ' + cable.signalType + '" data-patch-canvas-disconnect="' + cable.connectionId + '" d="M ' + start.x + ' ' + start.y + ' C ' + (start.x + (direction * bend)) + ' ' + start.y + ', ' + (end.x - (direction * bend)) + ' ' + end.y + ', ' + end.x + ' ' + end.y + '" marker-end="url(#patch-rack-cable-arrow)" tabindex="0" role="button" aria-label="Remove ' + cable.accessibleLabel + '"/>';
     }).join('');
     cableLayer.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
     cableLayer.setAttribute('aria-label', visual.cables.length ? visual.cables.map((cable) => cable.accessibleLabel).join('; ') : 'No patch cables connected.');
@@ -286,6 +286,15 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     render();
   };
   const stopVoice = () => { const active = voice; voice = undefined; void active?.stop(); };
+  const disconnectCable = (connectionId: ConnectionId) => {
+    const result = disconnectPort(state, connectionId);
+    state = result.state;
+    if (!planFullSynthVoice(state).ready) stopVoice();
+    publishOscillatorBoundary();
+    publishEnvelope(observeLiveSignal(runtime, 'envelope:envelope').value ?? 5);
+    message = result.reason;
+    render();
+  };
   const click = (event: Event) => {
     const target = event.target as HTMLElement;
     if (target.closest('[data-build-full-voice]')) { buildFullVoicePatch(); return; }
@@ -303,13 +312,7 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     }
     const remove = target.closest<HTMLElement>('[data-patch-canvas-disconnect]');
     if (!remove) return;
-    const result = disconnectPort(state, remove.dataset.patchCanvasDisconnect as ConnectionId);
-    state = result.state;
-    if (!planFullSynthVoice(state).ready) stopVoice();
-    publishOscillatorBoundary();
-    publishEnvelope(observeLiveSignal(runtime, 'envelope:envelope').value ?? 5);
-    message = result.reason;
-    render();
+    disconnectCable(remove.dataset.patchCanvasDisconnect as ConnectionId);
   };
 
   const input = (event: Event) => {
@@ -365,7 +368,7 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     state = result.state;
     rejectedDestinationEndpointId = result.status === 'rejected' ? attemptedDestination : undefined;
     message = result.status === 'connected'
-      ? 'Connected. The cable now runs from the output jack to the input jack; its arrow shows signal direction.'
+      ? 'Connected. The cable now runs from the output jack to the input jack; its arrow shows signal direction. Click the cable or use Remove in the cable list to disconnect it.'
       : 'Cannot connect these sockets: ' + result.reason + ' ' + result.teachingNote;
     sourceEndpointId = undefined;
     destinationEndpointId = undefined;
@@ -379,9 +382,24 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     render();
   };
 
+  const disconnectCableAtTarget = (event: Event) => {
+    const cable = (event.target as Element).closest<SVGPathElement>('[data-patch-canvas-disconnect]');
+    if (!cable) return;
+    disconnectCable(cable.dataset.patchCanvasDisconnect as ConnectionId);
+  };
+  const disconnectCableWithKeyboard = (event: KeyboardEvent) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const cable = (event.target as Element).closest<SVGPathElement>('[data-patch-canvas-disconnect]');
+    if (!cable) return;
+    event.preventDefault();
+    disconnectCable(cable.dataset.patchCanvasDisconnect as ConnectionId);
+  };
+
   const rackResizeObserver = new ResizeObserver(drawEndpointCables);
   rackResizeObserver.observe(rackShell);
   rack.addEventListener('click', selectSocket);
+  cableLayer.addEventListener('click', disconnectCableAtTarget);
+  cableLayer.addEventListener('keydown', disconnectCableWithKeyboard);
   rack.addEventListener('input', input);
   rack.addEventListener('change', input);
   clear.addEventListener('click', clearSelection);
@@ -392,6 +410,8 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
   return () => {
     rackResizeObserver.disconnect();
     rack.removeEventListener('click', selectSocket);
+    cableLayer.removeEventListener('click', disconnectCableAtTarget);
+    cableLayer.removeEventListener('keydown', disconnectCableWithKeyboard);
     rack.removeEventListener('input', input);
     rack.removeEventListener('change', input);
     clear.removeEventListener('click', clearSelection);
