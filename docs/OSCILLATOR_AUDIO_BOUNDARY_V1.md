@@ -2,7 +2,7 @@
 
 Module 03 remains the owner of its accepted oscillator lesson, controls, scope and standalone Web Audio demonstration. It additionally publishes the current waveform, frequency, pulse width and peak amplitude as a finite source record.
 
-Patch Canvas has no default or substitute oscillator. It cannot start its voice until that Module 03 record exists.
+Patch Canvas has no hidden default or substitute oscillator. Its M03 rack card can explicitly publish the visible waveform, pitch, amplitude and pulse-width settings as the source record; Oscillator Lab can still publish its own record. Patch Canvas cannot start until one of those explicit records exists.
 
 The explicit patch route is:
 
