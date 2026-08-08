@@ -14,8 +14,8 @@
 
 /* Endpoint-anchored patch cables */
 .patch-rack-shell{position:relative;isolation:isolate}
-.patch-rack-cable-layer{position:absolute;inset:0;z-index:2;width:100%;height:100%;overflow:visible;pointer-events:none}
-.patch-rack-cable{fill:none;stroke:#f4c96b;stroke-width:4;stroke-linecap:round;vector-effect:non-scaling-stroke;filter:drop-shadow(0 0 4px rgba(244,201,107,.5))}
+.patch-rack-cable-layer{position:absolute;inset:0;z-index:2;width:100%;height:100%;overflow:visible;pointer-events:auto}
+.patch-rack-cable{fill:none;stroke:#f4c96b;stroke-width:4;stroke-linecap:round;vector-effect:non-scaling-stroke;filter:drop-shadow(0 0 4px rgba(244,201,107,.5));pointer-events:stroke;cursor:pointer}.patch-rack-cable:hover{stroke-width:6}.patch-rack-cable:focus-visible{outline:none;stroke-width:7;filter:drop-shadow(0 0 7px #fff)}
 .patch-rack-cable.cv{stroke:#79c8ff;filter:drop-shadow(0 0 4px rgba(121,200,255,.5))}
 .patch-rack-cable.clock,.patch-rack-cable.gate,.patch-rack-cable.trigger{stroke:#a7de75;filter:drop-shadow(0 0 4px rgba(167,222,117,.5))}
 .patch-rack-cable-layer marker path{fill:#f4c96b}
