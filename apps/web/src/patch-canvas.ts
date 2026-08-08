@@ -15,6 +15,7 @@ import { visualisePatchState } from '../../../packages/visual-patch-cables/src/i
 import { BrowserFullSynthVoice } from '../../../packages/full-synth-voice/src/browser';
 import {
   normaliseFullSynthVoiceControls,
+  pitchCvToFrequency,
   planFullSynthVoice,
   planFullSynthVoiceSource,
   REQUIRED_VOICE_CABLES,
@@ -82,6 +83,16 @@ function rackMarkup(sourceEndpointId: PortEndpointId | undefined, destinationEnd
 
 function sourceId(value: string): PortEndpointId | undefined {
   return value ? value as PortEndpointId : undefined;
+}
+
+function browserWaveformForControl(waveform: FullSynthVoiceControls['waveform']): BrowserAudioSource['waveform'] {
+  switch (waveform) {
+    case 'sawtooth': return 'saw';
+    case 'sine':
+    case 'square':
+    case 'triangle': return waveform;
+    default: return 'sine';
+  }
 }
 
 function statusText(proposal: PatchCanvasProposal): { label: string; tone: string } {
@@ -307,6 +318,15 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     if (target.matches('[data-full-voice-cutoff]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, cutoffCv: Number(target.value) });
     if (target.matches('[data-full-voice-level]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, level: Number(target.value) });
     if (target.matches('[data-live-envelope-cv]')) { publishEnvelope(Number(target.value)); render(); return; }
+    if (target.matches('[data-full-voice-waveform], [data-full-voice-pitch]')) {
+      const source = browserSource();
+      if (source) voice?.setOscillatorSource({
+        ...source,
+        waveform: browserWaveformForControl(voiceControls.waveform),
+        frequencyHz: pitchCvToFrequency(voiceControls.pitchCv),
+        observedAt: Date.now(),
+      });
+    }
     voice?.setControls(voiceControls);
   };
 
