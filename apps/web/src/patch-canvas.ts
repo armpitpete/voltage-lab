@@ -338,6 +338,12 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     if (target.matches('[data-full-voice-cutoff]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, cutoffCv: Number(target.value) });
     if (target.matches('[data-full-voice-level]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, level: Number(target.value) });
     if (target.matches('[data-live-envelope-cv]')) { publishEnvelope(Number(target.value)); render(); return; }
+    const readout = target instanceof HTMLInputElement ? target.parentElement?.querySelector('output') : undefined;
+    if (readout && target.matches('[data-full-voice-pitch]')) readout.value = Number(target.value).toFixed(2) + ' V';
+    if (readout && target.matches('[data-full-voice-amplitude]')) readout.value = '±' + Number(target.value).toFixed(1) + ' V';
+    if (readout && target.matches('[data-full-voice-pulse-width]')) readout.value = Math.round(Number(target.value) * 100) + '%';
+    if (readout && target.matches('[data-full-voice-cutoff]')) readout.value = Number(target.value).toFixed(2) + ' V';
+    if (readout && target.matches('[data-full-voice-level]')) readout.value = Number(target.value).toFixed(2);
     if (target.matches('[data-full-voice-waveform], [data-full-voice-pitch], [data-full-voice-amplitude], [data-full-voice-pulse-width]') && canvasOscillatorSource) {
       canvasOscillatorSource = canvasSourceFromControls();
       publishOscillatorBoundary();
