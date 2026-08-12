@@ -25,6 +25,15 @@ export type M09PatchSourceState = {
   source: PeriodicSignalSource;
 };
 
+export type M09DestinationSample = {
+  runtime: LiveSignalRuntimeState;
+  sourceVoltage: number | undefined;
+  cutoffCv: number;
+  filterConnected: boolean;
+  vcaModulationCv: number | undefined;
+  vcaConnected: boolean;
+};
+
 export type M09FilterCutoffSample = {
   runtime: LiveSignalRuntimeState;
   sourceVoltage: number | undefined;
@@ -120,24 +129,43 @@ export function publishM09PatchSource(
 }
 
 /**
- * Samples M09 and returns the real Filter Cutoff CV delivery if and only if the
- * lfo-modulation:lfo → filter:cutoff cable exists. Otherwise the caller's local cutoff
- * value remains authoritative.
+ * Samples the one M09 source once, then reports only deliveries created by real
+ * Connection Engine cables. A missing destination remains undefined rather than
+ * receiving a hidden default or invented adapter.
  */
+export function sampleM09Destinations(
+  runtime: LiveSignalRuntimeState,
+  patch: PatchState,
+  observedAt: number,
+  localCutoffCv: number,
+): M09DestinationSample {
+  const sampled = sampleLiveSignalsAt(runtime, patch, observedAt);
+  const nextRuntime = sampled.state;
+  const sourceVoltage = observeLiveSignal(nextRuntime, 'lfo-modulation:lfo').value;
+  const filterDelivery = observeLiveSignal(nextRuntime, 'filter:cutoff').value;
+  const vcaDelivery = observeLiveSignal(nextRuntime, 'vca-mixer:modulation').value;
+  return {
+    runtime: nextRuntime,
+    sourceVoltage,
+    cutoffCv: filterDelivery ?? localCutoffCv,
+    filterConnected: filterDelivery !== undefined,
+    vcaModulationCv: vcaDelivery,
+    vcaConnected: vcaDelivery !== undefined,
+  };
+}
+
+/** Backwards-compatible filter-only view used by the first accepted M09 slice. */
 export function sampleM09FilterCutoff(
   runtime: LiveSignalRuntimeState,
   patch: PatchState,
   observedAt: number,
   localCutoffCv: number,
 ): M09FilterCutoffSample {
-  const sampled = sampleLiveSignalsAt(runtime, patch, observedAt);
-  const nextRuntime = sampled.state;
-  const sourceVoltage = observeLiveSignal(nextRuntime, 'lfo-modulation:lfo').value;
-  const delivered = observeLiveSignal(nextRuntime, 'filter:cutoff').value;
+  const sample = sampleM09Destinations(runtime, patch, observedAt, localCutoffCv);
   return {
-    runtime: nextRuntime,
-    sourceVoltage,
-    cutoffCv: delivered ?? localCutoffCv,
-    connected: delivered !== undefined,
+    runtime: sample.runtime,
+    sourceVoltage: sample.sourceVoltage,
+    cutoffCv: sample.cutoffCv,
+    connected: sample.filterConnected,
   };
 }
