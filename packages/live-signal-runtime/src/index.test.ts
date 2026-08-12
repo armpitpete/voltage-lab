@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { connectPorts, createPatchState, disconnectPort } from '../../connection-engine/src/index';
+import { lfoWave, lfoVoltage, type LfoShape } from '../../lfo-modulation-model/src/index';
 import { inspectSignal } from '../../signal-inspector/src/index';
 import {
   createLiveSignalRuntime,
@@ -10,6 +11,7 @@ import {
   publishSignal,
   sampleLiveSignalsAt,
   type PeriodicSignalSource,
+  type PeriodicSignalWaveform,
 } from './index';
 
 function envelopeToVcaPatch() {
@@ -32,6 +34,7 @@ function lfoSource(overrides: Partial<PeriodicSignalSource> = {}): PeriodicSigna
     offset: 0,
     phaseCycles: 0,
     startedAtMs: 1000,
+    seed: 7,
     ...overrides,
   };
 }
@@ -87,6 +90,22 @@ describe('Live Signal Runtime v2.0', () => {
     expect(evaluatePeriodicSignalSource(source, 1750).value).toBeCloseTo(-2, 10);
   });
 
+  it('matches the accepted M09 waveform family at the same phase and seed', () => {
+    const shapes: readonly PeriodicSignalWaveform[] = ['sine', 'triangle', 'square', 'saw-up', 'saw-down', 'stepped-random'];
+    const phases = [0, 0.125, 0.5, 0.875, 1.25, 2.75];
+    for (const waveform of shapes) {
+      for (const phaseCycles of phases) {
+        const frame = evaluatePeriodicSignalSource(lfoSource({ waveform, amplitude: 1, phaseCycles }), 1000);
+        expect(frame.value).toBeCloseTo(lfoWave(waveform as LfoShape, phaseCycles, 7), 10);
+      }
+    }
+  });
+
+  it('does not run a periodic source backwards before its explicit start time', () => {
+    const source = lfoSource({ phaseCycles: 0.25 });
+    expect(evaluatePeriodicSignalSource(source, 500).value).toBeCloseTo(evaluatePeriodicSignalSource(source, 1000).value, 10);
+  });
+
   it('delivers a moving source only through the current real cable', () => {
     const connection = lfoToFilterPatch();
     expect(connection.status).toBe('connected');
@@ -101,16 +120,35 @@ describe('Live Signal Runtime v2.0', () => {
     expect(observeLiveSignalAt(published.state, disconnected, 'filter:modulation', 1250)).toEqual({ endpointId: 'filter:modulation' });
   });
 
-  it('rejects a periodic source whose possible range exceeds its declared socket', () => {
+  it('rejects an unclamped periodic source whose possible range exceeds its declared socket', () => {
     const result = publishPeriodicSignalSource(createLiveSignalRuntime(), createPatchState(), lfoSource({ amplitude: 2, offset: 4 }));
     expect(result.status).toBe('rejected');
     expect(result.reason).toContain('would produce 2 to 6');
     expect(result.reason).toContain('will not be silently clipped');
   });
 
+  it('permits an explicit source clamp only when the clamp itself fits the Port Contract', () => {
+    const source = lfoSource({ amplitude: 2, offset: 4, outputClamp: { minimum: -5, maximum: 5 } });
+    const result = publishPeriodicSignalSource(createLiveSignalRuntime(), createPatchState(), source);
+    expect(result.status).toBe('published');
+    expect(evaluatePeriodicSignalSource(source, 1250).value).toBe(5);
+    expect(evaluatePeriodicSignalSource(source, 1250).value).toBe(lfoVoltage({
+      shape: 'sine', phaseCycles: 0.25, amplitudeVoltage: 2, offsetVoltage: 4, minimumVoltage: -5, maximumVoltage: 5, seed: 7,
+    }).voltage);
+
+    const unsafeClamp = publishPeriodicSignalSource(createLiveSignalRuntime(), createPatchState(), lfoSource({
+      amplitude: 2,
+      offset: 4,
+      outputClamp: { minimum: -6, maximum: 5 },
+    }));
+    expect(unsafeClamp.status).toBe('rejected');
+    expect(unsafeClamp.reason).toContain('exceeds');
+  });
+
   it('rejects invalid periodic parameters and non-finite sampling times', () => {
     expect(publishPeriodicSignalSource(createLiveSignalRuntime(), createPatchState(), lfoSource({ frequencyHz: 0 })).reason).toContain('greater than zero');
     expect(publishPeriodicSignalSource(createLiveSignalRuntime(), createPatchState(), lfoSource({ amplitude: -1 })).reason).toContain('must not be negative');
+    expect(publishPeriodicSignalSource(createLiveSignalRuntime(), createPatchState(), lfoSource({ seed: Number.NaN })).reason).toContain('must all be finite');
     expect(sampleLiveSignalsAt(createLiveSignalRuntime(), createPatchState(), Number.NaN).status).toBe('rejected');
   });
 
