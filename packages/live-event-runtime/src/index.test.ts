@@ -89,7 +89,7 @@ describe('Live Event Runtime v1.0', () => {
       ...valid.state,
       connections: valid.state.connections.map((connection) => ({
         ...connection,
-        destinationEndpointId: 'envelope:gate',
+        destinationEndpointId: 'filter:audio',
       })) as PatchState['connections'],
     };
     const result = publishSignalEvent(createLiveEventRuntime(), forged, risingTrigger());
