@@ -38,6 +38,7 @@ const M02_GATE_SOURCE = 'clock-and-trigger:gate';
 const M02_TRIGGER_SOURCE = 'clock-and-trigger:trigger';
 const M05_GATE_DESTINATION = 'envelope:gate';
 const M05_TRIGGER_DESTINATION = 'envelope:trigger';
+const ORIGIN_EPSILON_MS = 1e-6;
 
 function hasExactCable(state: PatchState, sourceEndpointId: string, destinationEndpointId: string): boolean {
   return state.connections.some((connection) =>
@@ -147,22 +148,56 @@ export class PatchCanvasTimingController {
 
   updateM02(controls: Partial<M02PatchSourceControls>, observedAtMs: number): void {
     this.m02 = updateM02PatchSource(this.m02, controls, observedAtMs);
-    this.lastSampleAtMs = observedAtMs;
+    // Keep the new timing-origin edge eligible for the next sample. The envelope may
+    // already be processed through observedAtMs; applying an edge at that exact time is valid.
+    this.lastSampleAtMs = observedAtMs - ORIGIN_EPSILON_MS;
+    this.latest = {
+      ...this.latest,
+      m02Controls: this.m02.controls,
+      m02Levels: m02OutputLevelsAt(this.m02, observedAtMs),
+      deliveriesThisWindow: 0,
+    };
   }
 
   resetM02(observedAtMs: number): void {
     this.m02 = resetM02PatchSource(this.m02, observedAtMs);
-    this.lastSampleAtMs = observedAtMs;
+    this.lastSampleAtMs = observedAtMs - ORIGIN_EPSILON_MS;
+    this.latest = {
+      ...this.latest,
+      m02Controls: this.m02.controls,
+      m02Levels: m02OutputLevelsAt(this.m02, observedAtMs),
+      deliveriesThisWindow: 0,
+    };
   }
 
   updateM05(controls: Partial<M05ExternalEnvelopeControls>, observedAtMs: number): void {
     this.m05 = updateM05ExternalEnvelopeControls(this.m05, controls, observedAtMs);
     this.lastSampleAtMs = observedAtMs;
+    const envelope = sampleM05ExternalEnvelope(this.m05, observedAtMs);
+    this.m05 = envelope.state;
+    this.latest = {
+      ...this.latest,
+      m05Controls: this.m05.controls,
+      m05Stage: envelope.snapshot.stage,
+      m05GateHigh: envelope.snapshot.gate,
+      m05Voltage: envelope.snapshot.voltage,
+      deliveriesThisWindow: 0,
+    };
   }
 
   resetM05(observedAtMs: number): void {
     this.m05 = resetM05ExternalEnvelope(this.m05, observedAtMs);
     this.lastSampleAtMs = observedAtMs;
+    const envelope = sampleM05ExternalEnvelope(this.m05, observedAtMs);
+    this.m05 = envelope.state;
+    this.latest = {
+      ...this.latest,
+      m05Controls: this.m05.controls,
+      m05Stage: envelope.snapshot.stage,
+      m05GateHigh: envelope.snapshot.gate,
+      m05Voltage: envelope.snapshot.voltage,
+      deliveriesThisWindow: 0,
+    };
   }
 
   snapshot(): PatchCanvasTimingSnapshot {
