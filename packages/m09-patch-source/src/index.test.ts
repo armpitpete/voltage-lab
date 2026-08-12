@@ -21,6 +21,12 @@ function filterAndVcaPatch() {
   return connectPorts(filter.state, 'lfo-modulation:lfo', 'vca-mixer:modulation');
 }
 
+function allDestinationPatch() {
+  const vca = filterAndVcaPatch();
+  if (vca.status !== 'connected') throw new Error('Expected direct M09 VCA cable.');
+  return connectPorts(vca.state, 'lfo-modulation:lfo', 'oscillator:modulation');
+}
+
 describe('M09 Patch Source v0.1', () => {
   it('normalises the same visible control bounds as the accepted M09 Lab', () => {
     expect(normaliseM09PatchSourceControls({
@@ -57,8 +63,8 @@ describe('M09 Patch Source v0.1', () => {
     expect(half.cutoffCv).toBeCloseTo(4);
   });
 
-  it('samples one M09 source into both directly cabled filter and VCA modulation inputs', () => {
-    const patch = filterAndVcaPatch();
+  it('samples one M09 source into filter, VCA and M03 modulation inputs when all three real cables exist', () => {
+    const patch = allDestinationPatch();
     expect(patch.status).toBe('connected');
     const source = createM09PatchSource({ waveform: 'square', rateHz: 1, amplitudeVolts: 3, offsetVolts: 0 }, 0);
     const published = publishM09PatchSource(createLiveSignalRuntime(), patch.state, source);
@@ -68,6 +74,8 @@ describe('M09 Patch Source v0.1', () => {
     expect(sample.cutoffCv).toBe(3);
     expect(sample.vcaConnected).toBe(true);
     expect(sample.vcaModulationCv).toBe(3);
+    expect(sample.oscillatorConnected).toBe(true);
+    expect(sample.oscillatorModulationCv).toBe(3);
   });
 
   it('removes only the disconnected VCA delivery while preserving the other real M09 cable', () => {
@@ -81,6 +89,19 @@ describe('M09 Patch Source v0.1', () => {
     expect(sample.cutoffCv).toBe(2);
     expect(sample.vcaConnected).toBe(false);
     expect(sample.vcaModulationCv).toBeUndefined();
+  });
+
+  it('removes only the disconnected M03 delivery while preserving Filter and VCA routes', () => {
+    const patch = allDestinationPatch();
+    if (patch.status !== 'connected' || !patch.connection) throw new Error('Expected direct M09 M03 modulation cable.');
+    const source = createM09PatchSource({ waveform: 'square', rateHz: 1, amplitudeVolts: 2 }, 0);
+    const published = publishM09PatchSource(createLiveSignalRuntime(), patch.state, source);
+    const disconnected = disconnectPort(patch.state, patch.connection.id);
+    const sample = sampleM09Destinations(published.state, disconnected.state, 100, -1.5);
+    expect(sample.filterConnected).toBe(true);
+    expect(sample.vcaConnected).toBe(true);
+    expect(sample.oscillatorConnected).toBe(false);
+    expect(sample.oscillatorModulationCv).toBeUndefined();
   });
 
   it('removes the filter effect on the next sample after the cable is disconnected', () => {
