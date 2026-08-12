@@ -26,6 +26,7 @@ import { inspectSignal } from '../../../packages/signal-inspector/src/index';
 import { readOscillatorOutput } from '../../../packages/oscillator-output-runtime/src/index';
 import { createBrowserAudioSource, type BrowserAudioSource } from '../../../packages/browser-audio-boundary/src/index';
 import type { ModulePortContract, PortEndpointId } from '../../../packages/port-contracts/src/index';
+import type { ModulationDestination } from '../../../packages/oscillator-model/src/index';
 import {
   createM09PatchSource,
   normaliseM09PatchSourceControls,
@@ -35,12 +36,14 @@ import {
   type M09PatchSourceControls,
   type M09PatchSourceState,
 } from '../../../packages/m09-patch-source/src/index';
+import { effectivePatchOscillatorSource } from './m09-oscillator-runtime';
 import { effectivePatchVcaCv } from './m09-vca-runtime';
 
 const moduleRoutes = new Map(voltageLabModules.map((module) => [module.id, module.route]));
 const M09_SOURCE = 'lfo-modulation:lfo' as PortEndpointId;
 const M09_FILTER_DESTINATION = 'filter:cutoff' as PortEndpointId;
 const M09_VCA_DESTINATION = 'vca-mixer:modulation' as PortEndpointId;
+const M09_OSCILLATOR_DESTINATION = 'oscillator:modulation' as PortEndpointId;
 
 function portButtonMarkup(port: ModulePortContract, role: 'input' | 'output', selected: PortEndpointId | undefined, rejected: PortEndpointId | undefined): string {
   const selectedClass = selected === port.endpointId ? ' selected' : '';
@@ -48,6 +51,13 @@ function portButtonMarkup(port: ModulePortContract, role: 'input' | 'output', se
   const dataAttribute = role === 'output' ? 'data-patch-canvas-output' : 'data-patch-canvas-input';
   return '<button type="button" class="patch-rack-port ' + role + selectedClass + rejectedClass + '" ' + dataAttribute + '="' + port.endpointId + '" aria-pressed="' + (selected === port.endpointId ? 'true' : 'false') + '" aria-invalid="' + (rejected === port.endpointId ? 'true' : 'false') + '">' +
     '<span class="patch-rack-jack" aria-hidden="true"></span><span><b>' + port.label + '</b><small>' + port.signalType + ' · ' + port.range.minimum + ' to ' + port.range.maximum + ' ' + port.range.unit + '</small></span></button>';
+}
+
+function oscillatorModulationLabel(destination: ModulationDestination, source: BrowserAudioSource | undefined): string {
+  if (!source) return '—';
+  if (destination === 'pitch') return source.frequencyHz.toFixed(1) + ' Hz';
+  if (destination === 'pulseWidth') return Math.round(source.pulseWidth * 100) + '%';
+  return '±' + source.sourcePeakVolts.toFixed(2) + ' V';
 }
 
 function moduleControlsMarkup(
@@ -63,6 +73,10 @@ function moduleControlsMarkup(
   vcaModulationAttenuverter: number,
   m09VcaConnected: boolean,
   m09VcaModulationVoltage: number | undefined,
+  m03ModulationDestination: ModulationDestination,
+  m09OscillatorConnected: boolean,
+  m09OscillatorModulationVoltage: number | undefined,
+  effectiveOscillatorSource: BrowserAudioSource | undefined,
 ): string {
   const liveLabel = '<p class="patch-rack-control-status"><b>Live voice control</b> · shared with the safe monitor below.</p>';
   if (moduleId === 'oscillator') {
@@ -70,14 +84,19 @@ function moduleControlsMarkup(
       '<option value="' + waveform + '"' + (controls.waveform === waveform ? ' selected' : '') + '>' +
       ({ sawtooth: 'Saw', square: 'Square', triangle: 'Triangle', sine: 'Sine', pulse: 'Pulse' } as Record<string, string>)[waveform] + '</option>',
     ).join('');
+    const destinationOptions: readonly [ModulationDestination, string][] = [['pitch', 'Pitch'], ['pulseWidth', 'Pulse width'], ['amplitude', 'Amplitude']];
+    const modulationOptions = destinationOptions.map(([value, label]) => '<option value="' + value + '"' + (m03ModulationDestination === value ? ' selected' : '') + '>' + label + '</option>').join('');
+    const modulationVoltage = m09OscillatorModulationVoltage === undefined ? '—' : m09OscillatorModulationVoltage.toFixed(2) + ' V';
     const sourceState = oscillatorSourceActive
-      ? '<p class="patch-rack-control-status"><b>M03 source active</b> · its visible settings feed the Browser Audio Boundary.</p>'
+      ? '<p class="patch-rack-control-status"><b>M03 source active</b> · its visible base settings feed the Browser Audio Boundary.</p>'
       : '<p class="patch-rack-control-status">No source is active. Publish these visible M03 settings before starting the patch voice.</p>';
     return '<section class="patch-rack-controls"><h4>Controls</h4>' + liveLabel + sourceState +
       '<label>Waveform <select data-full-voice-waveform>' + waveformOptions + '</select></label>' +
       '<label>Pitch CV <input data-full-voice-pitch type="range" min="-3" max="3" step=".01" value="' + controls.pitchCv + '"><output>' + controls.pitchCv.toFixed(2) + ' V</output></label>' +
       '<label>Amplitude <input data-full-voice-amplitude type="range" min="0" max="5" step=".1" value="' + controls.sourceAmplitudeVolts + '"><output>±' + controls.sourceAmplitudeVolts.toFixed(1) + ' V</output></label>' +
       '<label>Pulse width <input data-full-voice-pulse-width type="range" min=".05" max=".95" step=".01" value="' + controls.pulseWidth + '"><output>' + Math.round(controls.pulseWidth * 100) + '%</output></label>' +
+      '<label>External modulation destination <select data-m03-mod-destination>' + modulationOptions + '</select></label>' +
+      '<p class="patch-rack-control-status"><b>M09 modulation:</b> <span data-m09-oscillator-modulation-voltage>' + modulationVoltage + '</span> · <span data-m09-oscillator-connection-state>' + (m09OscillatorConnected ? 'driving M03 modulation' : 'not connected') + '</span>. <b>Effective ' + (m03ModulationDestination === 'pulseWidth' ? 'pulse width' : m03ModulationDestination) + ':</b> <span data-m03-effective-modulation>' + oscillatorModulationLabel(m03ModulationDestination, effectiveOscillatorSource) + '</span>.</p>' +
       '<button type="button" data-full-voice-publish-source>' + (oscillatorSourceActive ? 'Refresh M03 patch source' : 'Use as M03 patch source') + '</button></section>';
   }
   if (moduleId === 'filter') {
@@ -104,7 +123,7 @@ function moduleControlsMarkup(
       '<option value="' + waveform + '"' + (m09Controls.waveform === waveform ? ' selected' : '') + '>' + waveformLabels[waveform] + '</option>',
     ).join('');
     const sourceState = m09SourceActive
-      ? '<p class="patch-rack-control-status"><b>M09 source active</b> · source <span data-m09-source-voltage>' + (m09SourceVoltage === undefined ? '—' : m09SourceVoltage.toFixed(2) + ' V') + '</span> · filter <span data-m09-connection-state>' + (m09CutoffConnected ? 'connected' : 'not connected') + '</span> · VCA <span data-m09-vca-connection-state>' + (m09VcaConnected ? 'connected' : 'not connected') + '</span>.</p>'
+      ? '<p class="patch-rack-control-status"><b>M09 source active</b> · source <span data-m09-source-voltage>' + (m09SourceVoltage === undefined ? '—' : m09SourceVoltage.toFixed(2) + ' V') + '</span> · M03 <span data-m09-oscillator-connection-state>' + (m09OscillatorConnected ? 'connected' : 'not connected') + '</span> · filter <span data-m09-connection-state>' + (m09CutoffConnected ? 'connected' : 'not connected') + '</span> · VCA <span data-m09-vca-connection-state>' + (m09VcaConnected ? 'connected' : 'not connected') + '</span>.</p>'
       : '<p class="patch-rack-control-status">M09 source is initialising.</p>';
     return '<section class="patch-rack-controls"><h4>Controls</h4><p class="patch-rack-control-status"><b>Live M09 source</b> · exact accepted waveform semantics with explicit ±5 V output clamp.</p>' + sourceState +
       '<label>Shape <select data-m09-waveform>' + waveformOptions + '</select></label>' +
@@ -133,6 +152,10 @@ function rackMarkup(
   vcaModulationAttenuverter: number,
   m09VcaConnected: boolean,
   m09VcaModulationVoltage: number | undefined,
+  m03ModulationDestination: ModulationDestination,
+  m09OscillatorConnected: boolean,
+  m09OscillatorModulationVoltage: number | undefined,
+  effectiveOscillatorSource: BrowserAudioSource | undefined,
 ): string {
   return listPatchCanvasRackModules().map((module) => {
     const route = moduleRoutes.get(module.moduleId);
@@ -145,7 +168,7 @@ function rackMarkup(
     return '<article class="patch-rack-module" data-patch-module="' + module.moduleId + '">' +
       '<header><span class="patch-rack-number">M' + String(module.moduleNumber).padStart(2, '0') + '</span><div><h3>' + module.moduleTitle + '</h3><p>' + (route ? 'Patch points and detailed controls' : 'Explicit signal-representation bridge') + '</p></div></header>' +
       '<div class="patch-rack-ports"><section><h4>Inputs</h4>' + inputs + '</section><section><h4>Outputs</h4>' + outputs + '</section></div>' +
-      moduleControlsMarkup(module.moduleId, controls, localCutoffCv, envelopeValue, oscillatorSourceActive, m09Controls, m09SourceActive, m09SourceVoltage, m09CutoffConnected, vcaModulationAttenuverter, m09VcaConnected, m09VcaModulationVoltage) +
+      moduleControlsMarkup(module.moduleId, controls, localCutoffCv, envelopeValue, oscillatorSourceActive, m09Controls, m09SourceActive, m09SourceVoltage, m09CutoffConnected, vcaModulationAttenuverter, m09VcaConnected, m09VcaModulationVoltage, m03ModulationDestination, m09OscillatorConnected, m09OscillatorModulationVoltage, effectiveOscillatorSource) +
       (route ? '<a class="patch-rack-lab-link" href="' + route + '">Open detailed Lab</a>' : '') +
       '</article>';
   }).join('');
@@ -263,23 +286,31 @@ function m09ModulationMarkup(
   vcaModulationVoltage: number | undefined,
   vcaModulationAttenuverter: number,
   effectiveVcaCv: number,
+  oscillatorConnected: boolean,
+  oscillatorModulationVoltage: number | undefined,
+  oscillatorDestination: ModulationDestination,
+  effectiveOscillatorSource: BrowserAudioSource | undefined,
 ): string {
   const filterCablePresent = hasDirectM09Cable(state, M09_FILTER_DESTINATION);
   const vcaCablePresent = hasDirectM09Cable(state, M09_VCA_DESTINATION);
+  const oscillatorCablePresent = hasDirectM09Cable(state, M09_OSCILLATOR_DESTINATION);
   const filterControl = filterCablePresent
     ? '<p class="patch-canvas-status ready">Real M09 LFO → Filter Cutoff cable connected.</p>'
     : '<button type="button" data-build-m09-filter-patch>Connect M09 LFO → Filter Cutoff</button>';
   const vcaControl = vcaCablePresent
     ? '<p class="patch-canvas-status ready">Real M09 LFO → VCA modulation cable connected.</p>'
     : '<button type="button" data-build-m09-vca-patch>Connect M09 LFO → VCA modulation</button>';
+  const oscillatorControl = oscillatorCablePresent
+    ? '<p class="patch-canvas-status ready">Real M09 LFO → M03 modulation cable connected.</p>'
+    : '<button type="button" data-build-m09-oscillator-patch>Connect M09 LFO → M03 modulation</button>';
   const sourceState = sourceActive
-    ? '<p><b>M09 source:</b> <span data-m09-source-voltage>' + (sourceVoltage === undefined ? '—' : sourceVoltage.toFixed(2) + ' V') + '</span>. <b>Filter:</b> <span data-m09-connection-state>' + (cutoffConnected ? 'driving Cutoff CV' : 'not receiving M09') + '</span> at <span data-m09-effective-cutoff>' + effectiveCutoffCv.toFixed(2) + ' V</span>. <b>VCA:</b> <span data-m09-vca-connection-state>' + (vcaConnected ? 'receiving modulation' : 'not receiving M09') + '</span>; modulation <span data-m09-vca-modulation-voltage>' + (vcaModulationVoltage === undefined ? '—' : vcaModulationVoltage.toFixed(2) + ' V') + '</span> × ' + Math.round(vcaModulationAttenuverter * 100) + '% → effective <span data-m09-effective-vca>' + effectiveVcaCv.toFixed(2) + ' V</span>.</p>'
+    ? '<p><b>M09 source:</b> <span data-m09-source-voltage>' + (sourceVoltage === undefined ? '—' : sourceVoltage.toFixed(2) + ' V') + '</span>. <b>M03:</b> <span data-m09-oscillator-connection-state>' + (oscillatorConnected ? 'receiving modulation' : 'not receiving M09') + '</span>; voltage <span data-m09-oscillator-modulation-voltage>' + (oscillatorModulationVoltage === undefined ? '—' : oscillatorModulationVoltage.toFixed(2) + ' V') + '</span> → ' + oscillatorDestination + ' <span data-m03-effective-modulation>' + oscillatorModulationLabel(oscillatorDestination, effectiveOscillatorSource) + '</span>. <b>Filter:</b> <span data-m09-connection-state>' + (cutoffConnected ? 'driving Cutoff CV' : 'not receiving M09') + '</span> at <span data-m09-effective-cutoff>' + effectiveCutoffCv.toFixed(2) + ' V</span>. <b>VCA:</b> <span data-m09-vca-connection-state>' + (vcaConnected ? 'receiving modulation' : 'not receiving M09') + '</span>; modulation <span data-m09-vca-modulation-voltage>' + (vcaModulationVoltage === undefined ? '—' : vcaModulationVoltage.toFixed(2) + ' V') + '</span> × ' + Math.round(vcaModulationAttenuverter * 100) + '% → effective <span data-m09-effective-vca>' + effectiveVcaCv.toFixed(2) + ' V</span>.</p>'
     : '<p>M09 is initialising. Its output becomes available automatically; a real cable still determines whether any destination changes.</p>';
-  return '<section class="patch-canvas-learning panel"><p class="eyebrow">M09 live modulation · real cable paths</p><h3>Use one LFO to move real destinations</h3><p>M09 LFO CV, Filter Cutoff CV and VCA modulation are all declared −5 to +5 V paths. The VCA then applies its own accepted visible attenuverter and 0–5 V clamp.</p><div class="button-row">' + filterControl + vcaControl + '</div>' + sourceState + '<p class="patch-canvas-boundary">Removing either cable removes only that effect. The filter returns to its local Cutoff CV; the VCA returns to the Envelope/base CV.</p></section>';
+  return '<section class="patch-canvas-learning panel"><p class="eyebrow">M09 live modulation · real cable paths</p><h3>Use one LFO to move real destinations</h3><p>The raw M09 LFO and all three modulation destinations use declared direct bipolar CV paths. M03 applies its existing Pitch/Pulse width/Amplitude transform; the VCA applies its visible attenuverter and 0–5 V clamp.</p><div class="button-row">' + oscillatorControl + filterControl + vcaControl + '</div>' + sourceState + '<p class="patch-canvas-boundary">Removing any one cable removes only that effect. M03 restores its base source, the filter restores local Cutoff CV, and the VCA restores Envelope/base CV.</p></section>';
 }
 
 export function mountPatchCanvas(root: HTMLElement): () => void {
-  root.innerHTML = '<section class="module-header"><div><p class="eyebrow">Modular Playground · Full Synth Rack v1.2</p><h2>Patch the whole instrument</h2><p>Every declared module and socket is here at once. The current audible voice and M09 LFO controls live on their own rack cards; unintegrated modules say so plainly.</p></div></section>' +
+  root.innerHTML = '<section class="module-header"><div><p class="eyebrow">Modular Playground · Full Synth Rack v1.3</p><h2>Patch the whole instrument</h2><p>Every declared module and socket is here at once. The current audible voice and M09 LFO controls live on their own rack cards; unintegrated modules say so plainly.</p></div></section>' +
     '<section class="patch-rack-intro panel"><h3>One visible rack</h3><p>The detailed Labs remain useful for slow learning. This is the instrument view: all nine modules, their patch points and the live patch evidence are kept together.</p><p class="patch-canvas-boundary">Click an <b>output</b> socket, then an <b>input</b> socket. Directly compatible routes can become cables; incompatible or adaptation-required routes stay explicit.</p></section>' +
     '<section class="patch-rack-shell" data-patch-canvas-rack-shell><svg class="patch-rack-cable-layer" data-patch-canvas-cable-layer role="group" aria-label="Patch cables. Click a cable to remove it."></svg><section class="patch-canvas-rack" data-patch-canvas-rack aria-label="Voltage Lab modular synth rack"></section></section>' +
     '<section class="patch-canvas-grid patch-canvas-instrument-grid"><aside class="patch-canvas-controls panel"><h3>Patch selection</h3><p data-patch-canvas-selection>Choose an output socket in the rack.</p><button type="button" data-patch-canvas-clear>Clear selection</button><p class="patch-canvas-boundary">The rack exposes every declared patch point. A module’s standalone detailed controls remain in its Lab until its real runtime has been integrated here.</p></aside>' +
@@ -303,18 +334,23 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
   let localFilterCutoffCv = voiceControls.cutoffCv;
   let runtime = createLiveSignalRuntime();
   let canvasOscillatorSource: BrowserAudioSource | undefined;
+  let effectiveOscillatorSource: BrowserAudioSource | undefined;
+  let m03ModulationDestination: ModulationDestination = 'pitch';
   let m09Controls = normaliseM09PatchSourceControls();
   let m09Source: M09PatchSourceState | undefined;
   let m09SourceVoltage: number | undefined;
   let m09CutoffConnected = false;
   let m09VcaConnected = false;
   let m09VcaModulationVoltage: number | undefined;
+  let m09OscillatorConnected = false;
+  let m09OscillatorModulationVoltage: number | undefined;
   let vcaModulationAttenuverter = 1;
   let m09AnimationFrame = 0;
-  const browserSource = () => {
+  const baseBrowserSource = () => {
     const output = readOscillatorOutput();
     return canvasOscillatorSource ?? (output ? createBrowserAudioSource(output) : undefined);
   };
+  const browserSource = () => effectiveOscillatorSource ?? baseBrowserSource();
   const canvasSourceFromControls = (): BrowserAudioSource => createBrowserAudioSource({
     version: '1.0',
     waveform: browserWaveformForControl(voiceControls.waveform),
@@ -332,6 +368,19 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     runtime = publishSignal(runtime, state, {
       sourceEndpointId: 'browser-audio-boundary:normalised-output', signalType: 'audio', value: source.normalisedPeak, observedAt: source.observedAt,
     }).state;
+  };
+  const applyEffectiveOscillatorSource = (observedAt: number) => {
+    const base = baseBrowserSource();
+    effectiveOscillatorSource = base
+      ? effectivePatchOscillatorSource({
+        baseSource: base,
+        modulationCv: m09OscillatorModulationVoltage,
+        destination: m03ModulationDestination,
+        connected: m09OscillatorConnected,
+        observedAt,
+      })
+      : undefined;
+    if (effectiveOscillatorSource) voice?.setOscillatorSource(effectiveOscillatorSource);
   };
   const drawEndpointCables = () => {
     const visual = visualisePatchState(state);
@@ -384,8 +433,12 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
       m09CutoffConnected = false;
       m09VcaConnected = false;
       m09VcaModulationVoltage = undefined;
+      m09OscillatorConnected = false;
+      m09OscillatorModulationVoltage = undefined;
       if (voiceControls.cutoffCv !== localFilterCutoffCv) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, cutoffCv: localFilterCutoffCv });
       applyEffectiveVcaCv();
+      applyEffectiveOscillatorSource(observedAt);
+      publishOscillatorBoundary();
       voice?.setControls(voiceControls);
       return;
     }
@@ -395,21 +448,29 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     m09CutoffConnected = sample.filterConnected;
     m09VcaConnected = sample.vcaConnected;
     m09VcaModulationVoltage = sample.vcaModulationCv;
+    m09OscillatorConnected = sample.oscillatorConnected;
+    m09OscillatorModulationVoltage = sample.oscillatorModulationCv;
     if (Math.abs(sample.cutoffCv - voiceControls.cutoffCv) > 0.0001) {
       voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, cutoffCv: sample.cutoffCv });
     }
     applyEffectiveVcaCv();
+    applyEffectiveOscillatorSource(observedAt);
+    publishOscillatorBoundary();
     voice?.setControls(voiceControls);
   };
   const updateM09Readouts = () => {
     const sourceText = m09SourceVoltage === undefined ? '—' : m09SourceVoltage.toFixed(2) + ' V';
     const vcaModulationText = m09VcaModulationVoltage === undefined ? '—' : m09VcaModulationVoltage.toFixed(2) + ' V';
+    const oscillatorModulationText = m09OscillatorModulationVoltage === undefined ? '—' : m09OscillatorModulationVoltage.toFixed(2) + ' V';
     root.querySelectorAll<HTMLElement>('[data-m09-source-voltage]').forEach((element) => { element.textContent = sourceText; });
     root.querySelectorAll<HTMLElement>('[data-m09-effective-cutoff]').forEach((element) => { element.textContent = voiceControls.cutoffCv.toFixed(2) + ' V'; });
     root.querySelectorAll<HTMLElement>('[data-m09-connection-state]').forEach((element) => { element.textContent = m09CutoffConnected ? 'driving Cutoff CV' : 'not receiving M09'; });
     root.querySelectorAll<HTMLElement>('[data-m09-vca-modulation-voltage]').forEach((element) => { element.textContent = vcaModulationText; });
     root.querySelectorAll<HTMLElement>('[data-m09-vca-connection-state]').forEach((element) => { element.textContent = m09VcaConnected ? 'driving VCA modulation' : 'not receiving M09'; });
     root.querySelectorAll<HTMLElement>('[data-m09-effective-vca]').forEach((element) => { element.textContent = voiceControls.vcaCv.toFixed(2) + ' V'; });
+    root.querySelectorAll<HTMLElement>('[data-m09-oscillator-modulation-voltage]').forEach((element) => { element.textContent = oscillatorModulationText; });
+    root.querySelectorAll<HTMLElement>('[data-m09-oscillator-connection-state]').forEach((element) => { element.textContent = m09OscillatorConnected ? 'driving M03 modulation' : 'not receiving M09'; });
+    root.querySelectorAll<HTMLElement>('[data-m03-effective-modulation]').forEach((element) => { element.textContent = oscillatorModulationLabel(m03ModulationDestination, effectiveOscillatorSource ?? baseBrowserSource()); });
   };
   const animateM09 = () => {
     sampleM09(Date.now());
@@ -437,15 +498,19 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
       vcaModulationAttenuverter,
       m09VcaConnected,
       m09VcaModulationVoltage,
+      m03ModulationDestination,
+      m09OscillatorConnected,
+      m09OscillatorModulationVoltage,
+      effectiveOscillatorSource ?? baseBrowserSource(),
     );
     selection.innerHTML = sourceEndpointId
       ? '<b>Output selected.</b> Choose an input socket. A directly compatible target connects immediately.'
       : (message ? '<b>Patch status:</b> ' + message : 'Choose an output socket in the rack.');
     drawEndpointCables();
     window.requestAnimationFrame(drawEndpointCables);
-    workbench.innerHTML = proposedRouteMarkup(proposal) + connectedCablesMarkup(state) + fullSynthVoiceMarkup(state, runtime, voiceControls, localFilterCutoffCv, browserSource()) + m09ModulationMarkup(state, Boolean(m09Source), m09SourceVoltage, m09CutoffConnected, voiceControls.cutoffCv, m09VcaConnected, m09VcaModulationVoltage, vcaModulationAttenuverter, voiceControls.vcaCv) +
+    workbench.innerHTML = proposedRouteMarkup(proposal) + connectedCablesMarkup(state) + fullSynthVoiceMarkup(state, runtime, voiceControls, localFilterCutoffCv, browserSource()) + m09ModulationMarkup(state, Boolean(m09Source), m09SourceVoltage, m09CutoffConnected, voiceControls.cutoffCv, m09VcaConnected, m09VcaModulationVoltage, vcaModulationAttenuverter, voiceControls.vcaCv, m09OscillatorConnected, m09OscillatorModulationVoltage, m03ModulationDestination, effectiveOscillatorSource ?? baseBrowserSource()) +
       '<section class="patch-canvas-learning panel"><h3>What this teaches</h3><p>An output is a source and an input is a destination. A solid cable with an arrow means Connection Engine has accepted a directly compatible route.</p><p>' +
-      (message || 'M09 can now fan one real moving CV source to the Filter and VCA modulation sockets through independent real cables.') + '</p></section>';
+      (message || 'M09 can now fan one real moving CV source to M03, Filter and VCA modulation through independent real cables.') + '</p></section>';
     updateM09Readouts();
   };
 
@@ -486,7 +551,6 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     const result = disconnectPort(state, connectionId);
     state = result.state;
     if (!planFullSynthVoice(state).ready) stopVoice();
-    publishOscillatorBoundary();
     publishEnvelope(observeLiveSignal(runtime, 'envelope:envelope').value ?? 5);
     sampleM09(Date.now());
     message = result.reason;
@@ -497,6 +561,7 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     if (target.closest('[data-build-full-voice]')) { buildFullVoicePatch(); return; }
     if (target.closest('[data-build-m09-filter-patch]')) { buildM09DestinationPatch(M09_FILTER_DESTINATION, 'Filter Cutoff'); return; }
     if (target.closest('[data-build-m09-vca-patch]')) { buildM09DestinationPatch(M09_VCA_DESTINATION, 'VCA modulation'); return; }
+    if (target.closest('[data-build-m09-oscillator-patch]')) { buildM09DestinationPatch(M09_OSCILLATOR_DESTINATION, 'M03 modulation'); return; }
     if (target.closest('[data-full-voice-start]')) {
       const source = browserSource();
       if (!planFullSynthVoice(state).ready || !source || voice) return;
@@ -529,6 +594,7 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     if (target.matches('[data-full-voice-pitch]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, pitchCv: Number(target.value) });
     if (target.matches('[data-full-voice-amplitude]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, sourceAmplitudeVolts: Number(target.value) });
     if (target.matches('[data-full-voice-pulse-width]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, pulseWidth: Number(target.value) });
+    if (target.matches('[data-m03-mod-destination]')) m03ModulationDestination = target.value as ModulationDestination;
     if (target.matches('[data-full-voice-cutoff]')) {
       localFilterCutoffCv = Number(target.value);
       if (!m09CutoffConnected) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, cutoffCv: localFilterCutoffCv });
@@ -564,8 +630,6 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     if (readout && target.matches('[data-m09-seed]')) readout.value = String(Math.round(Number(target.value)));
     if (target.matches('[data-full-voice-waveform], [data-full-voice-pitch], [data-full-voice-amplitude], [data-full-voice-pulse-width]') && canvasOscillatorSource) {
       canvasOscillatorSource = canvasSourceFromControls();
-      publishOscillatorBoundary();
-      voice?.setOscillatorSource(canvasOscillatorSource);
     }
     sampleM09(Date.now());
     voice?.setControls(voiceControls);
@@ -576,8 +640,8 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     const target = event.target as HTMLElement;
     if (target.closest('[data-full-voice-publish-source]')) {
       canvasOscillatorSource = canvasSourceFromControls();
-      publishOscillatorBoundary();
-      message = 'M03 source published from its Patch Canvas controls. It is ready for the explicit Browser Audio Boundary.';
+      sampleM09(Date.now());
+      message = 'M03 base source published from its Patch Canvas controls. Any real external modulation cable is applied separately.';
       render();
       return;
     }
