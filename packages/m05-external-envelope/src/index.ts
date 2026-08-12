@@ -180,6 +180,26 @@ export function sampleM05ExternalEnvelope(
 }
 
 /**
+ * A disconnected Gate socket is no longer being held high. Release that external hold
+ * immediately, while allowing any already-started Trigger one-shot to finish normally.
+ */
+export function releaseM05ExternalGate(
+  state: M05ExternalEnvelopeState,
+  observedAtMs: number,
+): M05ExternalEnvelopeState {
+  const sampled = sampleM05ExternalEnvelope(state, observedAtMs);
+  if (!sampled.state.externalGateHigh) return sampled.state;
+  const oneShotStillHigh = sampled.state.oneShotEndsAtMs !== undefined && observedAtMs < sampled.state.oneShotEndsAtMs;
+  return {
+    ...sampled.state,
+    externalGateHigh: false,
+    envelope: !oneShotStillHigh && sampled.state.envelope.gate
+      ? gateEnvelopeOff(sampled.state.envelope, settingsFromControls(sampled.state.controls), observedAtMs)
+      : sampled.state.envelope,
+  };
+}
+
+/**
  * Matches M05 Lab's settings rebase: preserve the current voltage, update accepted
  * visible control bounds, and restart the current stage timing from the edit instant.
  */
