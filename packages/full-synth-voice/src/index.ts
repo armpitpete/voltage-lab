@@ -76,7 +76,7 @@ export function normaliseFullSynthVoiceControls(
     pitchCv: clamp(controls.pitchCv ?? 0, -3, 3),
     sourceAmplitudeVolts: clamp(controls.sourceAmplitudeVolts ?? 2.5, 0, 5),
     pulseWidth: clamp(controls.pulseWidth ?? 0.5, 0.05, 0.95),
-    cutoffCv: clamp(controls.cutoffCv ?? 0, -4, 4),
+    cutoffCv: clamp(controls.cutoffCv ?? 0, -5, 5),
     vcaCv: clamp(controls.vcaCv ?? 5, 0, 5),
     level: clamp(controls.level ?? 0.12, 0, 0.16),
   };
