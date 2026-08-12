@@ -15,6 +15,7 @@ import { mountVcaMixer } from './vca-mixer';
 import { mountLfoModulationWithOscillatorVisual } from './lfo-modulation-with-oscillator-visual';
 import { mountModuleMiniOscilloscope } from './mini-oscilloscope';
 import { mountPatchCanvas } from './patch-canvas';
+import { initialisePatchCanvasSources } from './patch-canvas-live-sources';
 
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('Missing app root');
@@ -73,7 +74,9 @@ function route() {
     mountWithMiniScope('lfo-modulation', mountLfoModulationWithOscillatorVisual(moduleRoot));
   } else if (path === '#/patch-canvas') {
     root.querySelector('[data-route=patch-canvas]')?.classList.add('active');
-    keep(mountPatchCanvas(moduleRoot));
+    const mounted = mountPatchCanvas(moduleRoot);
+    initialisePatchCanvasSources(moduleRoot);
+    keep(mounted);
   } else {
     moduleRoot.innerHTML = '<section class="empty panel"><h2>Module not found</h2><a href="#/sample-and-hold">Open Sample & Hold</a></section>';
   }
