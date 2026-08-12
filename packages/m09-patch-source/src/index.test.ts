@@ -6,12 +6,19 @@ import {
   createM09PatchSource,
   normaliseM09PatchSourceControls,
   publishM09PatchSource,
+  sampleM09Destinations,
   sampleM09FilterCutoff,
   updateM09PatchSource,
 } from './index';
 
 function filterPatch() {
   return connectPorts(createPatchState(), 'lfo-modulation:lfo', 'filter:cutoff');
+}
+
+function filterAndVcaPatch() {
+  const filter = filterPatch();
+  if (filter.status !== 'connected') throw new Error('Expected direct M09 filter cable.');
+  return connectPorts(filter.state, 'lfo-modulation:lfo', 'vca-mixer:modulation');
 }
 
 describe('M09 Patch Source v0.1', () => {
@@ -48,6 +55,32 @@ describe('M09 Patch Source v0.1', () => {
     expect(quarter.connected).toBe(true);
     expect(quarter.cutoffCv).toBeCloseTo(0);
     expect(half.cutoffCv).toBeCloseTo(4);
+  });
+
+  it('samples one M09 source into both directly cabled filter and VCA modulation inputs', () => {
+    const patch = filterAndVcaPatch();
+    expect(patch.status).toBe('connected');
+    const source = createM09PatchSource({ waveform: 'square', rateHz: 1, amplitudeVolts: 3, offsetVolts: 0 }, 0);
+    const published = publishM09PatchSource(createLiveSignalRuntime(), patch.state, source);
+    const sample = sampleM09Destinations(published.state, patch.state, 100, -1.25);
+    expect(sample.sourceVoltage).toBe(3);
+    expect(sample.filterConnected).toBe(true);
+    expect(sample.cutoffCv).toBe(3);
+    expect(sample.vcaConnected).toBe(true);
+    expect(sample.vcaModulationCv).toBe(3);
+  });
+
+  it('removes only the disconnected VCA delivery while preserving the other real M09 cable', () => {
+    const patch = filterAndVcaPatch();
+    if (patch.status !== 'connected' || !patch.connection) throw new Error('Expected direct M09 VCA cable.');
+    const source = createM09PatchSource({ waveform: 'square', rateHz: 1, amplitudeVolts: 2 }, 0);
+    const published = publishM09PatchSource(createLiveSignalRuntime(), patch.state, source);
+    const disconnected = disconnectPort(patch.state, patch.connection.id);
+    const sample = sampleM09Destinations(published.state, disconnected.state, 100, -1.5);
+    expect(sample.filterConnected).toBe(true);
+    expect(sample.cutoffCv).toBe(2);
+    expect(sample.vcaConnected).toBe(false);
+    expect(sample.vcaModulationCv).toBeUndefined();
   });
 
   it('removes the filter effect on the next sample after the cable is disconnected', () => {
