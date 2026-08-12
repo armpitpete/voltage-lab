@@ -1,0 +1,10 @@
+/* Patch Canvas interaction safety.
+   The SVG layer spans the entire rack. It must not consume taps intended for
+   controls underneath it; only the visible cable strokes are interactive. */
+.patch-rack-cable-layer {
+  pointer-events: none;
+}
+
+.patch-rack-cable {
+  pointer-events: stroke;
+}
