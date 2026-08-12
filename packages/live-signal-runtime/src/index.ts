@@ -10,7 +10,12 @@ import type { SignalObservation } from '../../signal-inspector/src/index';
 export const LIVE_SIGNAL_RUNTIME_VERSION = '2.0' as const;
 export const PERIODIC_SIGNAL_SOURCE_VERSION = '1.0' as const;
 
-export type PeriodicSignalWaveform = 'sine' | 'triangle' | 'saw' | 'square';
+export type PeriodicSignalWaveform = 'sine' | 'triangle' | 'square' | 'saw-up' | 'saw-down' | 'stepped-random';
+
+export type ExplicitOutputClamp = {
+  minimum: number;
+  maximum: number;
+};
 
 export type PeriodicSignalSource = {
   version: typeof PERIODIC_SIGNAL_SOURCE_VERSION;
@@ -23,6 +28,8 @@ export type PeriodicSignalSource = {
   offset: number;
   phaseCycles: number;
   startedAtMs: number;
+  seed: number;
+  outputClamp?: ExplicitOutputClamp;
 };
 
 export type LiveSignalRuntimeState = {
@@ -73,27 +80,45 @@ function validateFrameSource(
   return { source };
 }
 
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
 function wrapCycle(value: number): number {
   return ((value % 1) + 1) % 1;
 }
 
-function periodicUnitValue(waveform: PeriodicSignalWaveform, phaseCycles: number): number {
+function deterministicStep(cycleIndex: number, seed: number): number {
+  let value = (Math.floor(cycleIndex) | 0) ^ (Math.floor(seed) | 0) ^ 0x9e3779b9;
+  value = Math.imul(value ^ (value >>> 16), 0x21f0aaad);
+  value = Math.imul(value ^ (value >>> 15), 0x735a2d97);
+  value ^= value >>> 15;
+  return (value >>> 0) / 0xffffffff * 2 - 1;
+}
+
+function periodicUnitValue(waveform: PeriodicSignalWaveform, phaseCycles: number, seed: number): number {
   const phase = wrapCycle(phaseCycles);
   switch (waveform) {
     case 'sine': return Math.sin(phase * Math.PI * 2);
     case 'triangle': return 1 - 4 * Math.abs(phase - 0.5);
-    case 'saw': return (2 * phase) - 1;
     case 'square': return phase < 0.5 ? 1 : -1;
+    case 'saw-up': return (2 * phase) - 1;
+    case 'saw-down': return 1 - (2 * phase);
+    case 'stepped-random': return deterministicStep(Math.floor(phaseCycles), seed);
   }
 }
 
 function evaluatePeriodicSignalSourceUnchecked(source: PeriodicSignalSource, observedAt: number): SignalFrame {
-  const elapsedSeconds = (observedAt - source.startedAtMs) / 1000;
+  const elapsedSeconds = Math.max(0, observedAt - source.startedAtMs) / 1000;
   const phaseCycles = source.phaseCycles + elapsedSeconds * source.frequencyHz;
+  const rawValue = source.offset + source.amplitude * periodicUnitValue(source.waveform, phaseCycles, source.seed);
+  const value = source.outputClamp
+    ? clamp(rawValue, source.outputClamp.minimum, source.outputClamp.maximum)
+    : rawValue;
   return {
     sourceEndpointId: source.sourceEndpointId,
     signalType: source.signalType,
-    value: source.offset + source.amplitude * periodicUnitValue(source.waveform, phaseCycles),
+    value,
     observedAt,
   };
 }
@@ -162,9 +187,10 @@ export function publishSignal(
 }
 
 /**
- * Registers a serialisable periodic source. Its complete possible output range must fit
- * inside the declared source socket before it is accepted. The initial frame is sampled
- * at startedAtMs, and later values are produced only by explicit sampling calls.
+ * Registers a serialisable periodic source. Without an explicit output clamp, its raw
+ * possible range must fit inside the declared source socket. A clamp is accepted only
+ * when the source program names it explicitly and the clamp itself is inside the Port
+ * Contract; the runtime never invents clipping as an adapter.
  */
 export function publishPeriodicSignalSource(
   state: LiveSignalRuntimeState,
@@ -183,6 +209,7 @@ export function publishPeriodicSignalSource(
     sourceProgram.offset,
     sourceProgram.phaseCycles,
     sourceProgram.startedAtMs,
+    sourceProgram.seed,
   ];
   if (!finiteParameters.every(Number.isFinite)) {
     return { state, status: 'rejected', reason: 'Periodic signal parameters must all be finite.', deliveries: [] };
@@ -193,9 +220,23 @@ export function publishPeriodicSignalSource(
   if (sourceProgram.amplitude < 0) {
     return { state, status: 'rejected', reason: 'Periodic signal amplitude must not be negative.', deliveries: [] };
   }
+
   const programMinimum = sourceProgram.offset - sourceProgram.amplitude;
   const programMaximum = sourceProgram.offset + sourceProgram.amplitude;
-  if (programMinimum < source.range.minimum || programMaximum > source.range.maximum) {
+  if (sourceProgram.outputClamp) {
+    const outputClamp = sourceProgram.outputClamp;
+    if (!Number.isFinite(outputClamp.minimum) || !Number.isFinite(outputClamp.maximum) || outputClamp.minimum > outputClamp.maximum) {
+      return { state, status: 'rejected', reason: 'An explicit periodic output clamp must have finite minimum and maximum values in ascending order.', deliveries: [] };
+    }
+    if (outputClamp.minimum < source.range.minimum || outputClamp.maximum > source.range.maximum) {
+      return {
+        state,
+        status: 'rejected',
+        reason: `The explicit periodic output clamp ${outputClamp.minimum} to ${outputClamp.maximum} exceeds ${source.endpointId}'s declared ${source.range.minimum} to ${source.range.maximum} ${source.range.unit} range.`,
+        deliveries: [],
+      };
+    }
+  } else if (programMinimum < source.range.minimum || programMaximum > source.range.maximum) {
     return {
       state,
       status: 'rejected',
