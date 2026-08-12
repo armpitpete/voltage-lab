@@ -38,12 +38,25 @@ import {
 } from '../../../packages/m09-patch-source/src/index';
 import { effectivePatchOscillatorSource } from './m09-oscillator-runtime';
 import { effectivePatchVcaCv } from './m09-vca-runtime';
+import {
+  PatchCanvasTimingController,
+  m02ControlChange,
+  m02RackControlsMarkup,
+  m05ControlChange,
+  m05RackControlsMarkup,
+  timingWorkbenchMarkup,
+  type PatchCanvasTimingSnapshot,
+} from './patch-canvas-timing';
 
 const moduleRoutes = new Map(voltageLabModules.map((module) => [module.id, module.route]));
 const M09_SOURCE = 'lfo-modulation:lfo' as PortEndpointId;
 const M09_FILTER_DESTINATION = 'filter:cutoff' as PortEndpointId;
 const M09_VCA_DESTINATION = 'vca-mixer:modulation' as PortEndpointId;
 const M09_OSCILLATOR_DESTINATION = 'oscillator:modulation' as PortEndpointId;
+const M02_GATE_SOURCE = 'clock-and-trigger:gate' as PortEndpointId;
+const M02_TRIGGER_SOURCE = 'clock-and-trigger:trigger' as PortEndpointId;
+const M05_GATE_DESTINATION = 'envelope:gate' as PortEndpointId;
+const M05_TRIGGER_DESTINATION = 'envelope:trigger' as PortEndpointId;
 
 function portButtonMarkup(port: ModulePortContract, role: 'input' | 'output', selected: PortEndpointId | undefined, rejected: PortEndpointId | undefined): string {
   const selectedClass = selected === port.endpointId ? ' selected' : '';
@@ -64,7 +77,6 @@ function moduleControlsMarkup(
   moduleId: string,
   controls: FullSynthVoiceControls,
   localCutoffCv: number,
-  envelopeValue: number,
   oscillatorSourceActive: boolean,
   m09Controls: M09PatchSourceControls,
   m09SourceActive: boolean,
@@ -77,8 +89,10 @@ function moduleControlsMarkup(
   m09OscillatorConnected: boolean,
   m09OscillatorModulationVoltage: number | undefined,
   effectiveOscillatorSource: BrowserAudioSource | undefined,
+  timingSnapshot: PatchCanvasTimingSnapshot,
 ): string {
   const liveLabel = '<p class="patch-rack-control-status"><b>Live voice control</b> · shared with the safe monitor below.</p>';
+  if (moduleId === 'clock-and-trigger') return m02RackControlsMarkup(timingSnapshot);
   if (moduleId === 'oscillator') {
     const waveformOptions = ['sawtooth', 'square', 'triangle', 'sine', 'pulse'].map((waveform) =>
       '<option value="' + waveform + '"' + (controls.waveform === waveform ? ' selected' : '') + '>' +
@@ -104,10 +118,7 @@ function moduleControlsMarkup(
       '<label>Local Cutoff CV <input data-full-voice-cutoff type="range" min="-5" max="5" step=".01" value="' + localCutoffCv + '"><output>' + localCutoffCv.toFixed(2) + ' V</output></label>' +
       '<p class="patch-rack-control-status">Effective cutoff CV: <b data-m09-effective-cutoff>' + controls.cutoffCv.toFixed(2) + ' V</b>. A real M09 → Cutoff cable overrides the local value while connected.</p></section>';
   }
-  if (moduleId === 'envelope') {
-    return '<section class="patch-rack-controls"><h4>Controls</h4>' + liveLabel +
-      '<label>Envelope CV output <input data-live-envelope-cv type="range" min="0" max="5" step=".01" value="' + envelopeValue + '"><output>' + envelopeValue.toFixed(2) + ' V</output></label></section>';
-  }
+  if (moduleId === 'envelope') return m05RackControlsMarkup(timingSnapshot);
   if (moduleId === 'vca-mixer') {
     const modulationText = m09VcaModulationVoltage === undefined ? '—' : m09VcaModulationVoltage.toFixed(2) + ' V';
     return '<section class="patch-rack-controls"><h4>Controls</h4>' + liveLabel +
@@ -143,7 +154,6 @@ function rackMarkup(
   rejectedDestinationEndpointId: PortEndpointId | undefined,
   controls: FullSynthVoiceControls,
   localCutoffCv: number,
-  envelopeValue: number,
   oscillatorSourceActive: boolean,
   m09Controls: M09PatchSourceControls,
   m09SourceActive: boolean,
@@ -156,6 +166,7 @@ function rackMarkup(
   m09OscillatorConnected: boolean,
   m09OscillatorModulationVoltage: number | undefined,
   effectiveOscillatorSource: BrowserAudioSource | undefined,
+  timingSnapshot: PatchCanvasTimingSnapshot,
 ): string {
   return listPatchCanvasRackModules().map((module) => {
     const route = moduleRoutes.get(module.moduleId);
@@ -168,7 +179,7 @@ function rackMarkup(
     return '<article class="patch-rack-module" data-patch-module="' + module.moduleId + '">' +
       '<header><span class="patch-rack-number">M' + String(module.moduleNumber).padStart(2, '0') + '</span><div><h3>' + module.moduleTitle + '</h3><p>' + (route ? 'Patch points and detailed controls' : 'Explicit signal-representation bridge') + '</p></div></header>' +
       '<div class="patch-rack-ports"><section><h4>Inputs</h4>' + inputs + '</section><section><h4>Outputs</h4>' + outputs + '</section></div>' +
-      moduleControlsMarkup(module.moduleId, controls, localCutoffCv, envelopeValue, oscillatorSourceActive, m09Controls, m09SourceActive, m09SourceVoltage, m09CutoffConnected, vcaModulationAttenuverter, m09VcaConnected, m09VcaModulationVoltage, m03ModulationDestination, m09OscillatorConnected, m09OscillatorModulationVoltage, effectiveOscillatorSource) +
+      moduleControlsMarkup(module.moduleId, controls, localCutoffCv, oscillatorSourceActive, m09Controls, m09SourceActive, m09SourceVoltage, m09CutoffConnected, vcaModulationAttenuverter, m09VcaConnected, m09VcaModulationVoltage, m03ModulationDestination, m09OscillatorConnected, m09OscillatorModulationVoltage, effectiveOscillatorSource, timingSnapshot) +
       (route ? '<a class="patch-rack-lab-link" href="' + route + '">Open detailed Lab</a>' : '') +
       '</article>';
   }).join('');
@@ -191,16 +202,13 @@ function browserWaveformForControl(waveform: FullSynthVoiceControls['waveform'])
 
 function statusText(proposal: PatchCanvasProposal): { label: string; tone: string } {
   switch (proposal.stage) {
-    case 'choose-output':
-      return { label: 'Choose an output', tone: 'neutral' };
-    case 'choose-input':
-      return { label: 'Choose an input', tone: 'neutral' };
+    case 'choose-output': return { label: 'Choose an output', tone: 'neutral' };
+    case 'choose-input': return { label: 'Choose an input', tone: 'neutral' };
     case 'proposal-ready':
       return proposal.compatibility?.level === 'direct'
         ? { label: 'Directly compatible', tone: 'ready' }
         : { label: 'Compatible with an explicit adaptation', tone: 'adaptation' };
-    case 'proposal-rejected':
-      return { label: 'Not compatible', tone: 'rejected' };
+    case 'proposal-rejected': return { label: 'Not compatible', tone: 'rejected' };
   }
 }
 
@@ -252,20 +260,18 @@ function fullSynthVoiceMarkup(state: PatchState, runtime: LiveSignalRuntimeState
   const sourcePlan = planFullSynthVoiceSource(source);
   const envelopeInspection = inspectSignal(observeLiveSignal(runtime, 'envelope:envelope'));
   const vcaInspection = inspectSignal(observeLiveSignal(runtime, 'vca-mixer:vca-cv'));
-  const envelopeValue = envelopeInspection?.range.value ?? 5;
+  const envelopeValue = envelopeInspection?.range.value ?? 0;
   const deliveredValue = vcaInspection?.range.value;
-  const cables = plan.requiredCables.map((cable) =>
-    '<li><b>' + cable.label + '</b><span>' + cable.purpose + '</span></li>',
-  ).join('');
+  const cables = plan.requiredCables.map((cable) => '<li><b>' + cable.label + '</b><span>' + cable.purpose + '</span></li>').join('');
   const readiness = plan.ready
     ? '<p class="patch-canvas-status ready">Complete real cable set: this reference voice can now start.</p>'
     : '<p class="patch-canvas-boundary"><b>Still needed:</b> ' + plan.missingCables.map((cable) => cable.label).join('; ') + '.</p>';
   const actions = plan.ready && sourcePlan.ready
-    ? '<div class="full-synth-voice-controls"><p class="patch-canvas-boundary"><b>Module 03 source:</b> ' + sourcePlan.reason + ' Browser boundary peak: ' + source?.normalisedPeak.toFixed(2) + '.</p><label>Local Cutoff CV <input data-full-voice-cutoff type="range" min="-5" max="5" step=".01" value="' + localCutoffCv + '"></label><label>Envelope CV source <input data-live-envelope-cv type="range" min="0" max="5" step=".01" value="' + envelopeValue + '"></label><p class="patch-canvas-boundary"><b>Effective filter CV:</b> <span data-m09-effective-cutoff>' + controls.cutoffCv.toFixed(2) + ' V</span>. <b>Effective VCA CV:</b> <span data-m09-effective-vca>' + controls.vcaCv.toFixed(2) + ' V</span>. <b>Live Inspector:</b> Envelope output ' + (envelopeInspection?.range.value ?? 'not published') + ' V → VCA base input ' + (deliveredValue ?? 'not connected') + ' V.</p><div class="button-row"><button type="button" data-full-voice-start>Start Module 03 source</button><button type="button" data-full-voice-note>Play short note</button><button type="button" data-full-voice-stop>Panic / stop</button></div></div>'
+    ? '<div class="full-synth-voice-controls"><p class="patch-canvas-boundary"><b>Module 03 source:</b> ' + sourcePlan.reason + ' Browser boundary peak: ' + source?.normalisedPeak.toFixed(2) + '.</p><label>Local Cutoff CV <input data-full-voice-cutoff type="range" min="-5" max="5" step=".01" value="' + localCutoffCv + '"></label><p class="patch-canvas-boundary"><b>M05 Envelope output:</b> ' + envelopeValue.toFixed(2) + ' V. <b>VCA base input:</b> ' + (deliveredValue ?? 'not connected') + ' V. <b>Effective filter CV:</b> <span data-m09-effective-cutoff>' + controls.cutoffCv.toFixed(2) + ' V</span>. <b>Effective VCA CV:</b> <span data-m09-effective-vca>' + controls.vcaCv.toFixed(2) + ' V</span>.</p><div class="button-row"><button type="button" data-full-voice-start>Start patch audio</button><button type="button" data-full-voice-stop>Panic / stop</button></div></div>'
     : plan.ready
       ? '<p class="patch-canvas-boundary">' + sourcePlan.reason + ' <a href="#/oscillator">Open Oscillator Lab</a>.</p>'
-    : '<button type="button" data-build-full-voice>Build these four real cables</button>';
-  return '<section class="patch-canvas-learning panel full-synth-voice"><p class="eyebrow">Full Synth Voice v1.0 · real patch monitor</p><h3>Hear the patched audio and control paths</h3><p>This safe monitor uses Module 03’s published source configuration only through the explicit Browser Audio Boundary.</p><ol class="full-synth-voice-cables">' + cables + '</ol>' + readiness + actions + '<p class="patch-canvas-boundary">The browser re-renders the published Module 03 configuration; it does not transport Module 03’s original AudioNode between routes.</p></section>';
+      : '<button type="button" data-build-full-voice>Build these four real cables</button>';
+  return '<section class="patch-canvas-learning panel full-synth-voice"><p class="eyebrow">Full Synth Voice v1.0 · real patch monitor</p><h3>Hear the patched audio and control paths</h3><p>The browser audio monitor opens only after an explicit Start. Once open, the real M05 Envelope → VCA CV cable controls loudness continuously; there is no second hidden musical envelope.</p><ol class="full-synth-voice-cables">' + cables + '</ol>' + readiness + actions + '<p class="patch-canvas-boundary">The browser re-renders the published Module 03 configuration; it does not transport Module 03’s original AudioNode between routes.</p></section>';
 }
 
 function hasDirectM09Cable(state: PatchState, destinationEndpointId: PortEndpointId): boolean {
@@ -310,7 +316,7 @@ function m09ModulationMarkup(
 }
 
 export function mountPatchCanvas(root: HTMLElement): () => void {
-  root.innerHTML = '<section class="module-header"><div><p class="eyebrow">Modular Playground · Full Synth Rack v1.3</p><h2>Patch the whole instrument</h2><p>Every declared module and socket is here at once. The current audible voice and M09 LFO controls live on their own rack cards; unintegrated modules say so plainly.</p></div></section>' +
+  root.innerHTML = '<section class="module-header"><div><p class="eyebrow">Modular Playground · Full Synth Rack v1.4</p><h2>Patch the whole instrument</h2><p>Every declared module and socket is here at once. M02 timing, M03 audio, M05 envelope and M09 modulation now run on the shared rack through real cables.</p></div></section>' +
     '<section class="patch-rack-intro panel"><h3>One visible rack</h3><p>The detailed Labs remain useful for slow learning. This is the instrument view: all nine modules, their patch points and the live patch evidence are kept together.</p><p class="patch-canvas-boundary">Click an <b>output</b> socket, then an <b>input</b> socket. Directly compatible routes can become cables; incompatible or adaptation-required routes stay explicit.</p></section>' +
     '<section class="patch-rack-shell" data-patch-canvas-rack-shell><svg class="patch-rack-cable-layer" data-patch-canvas-cable-layer role="group" aria-label="Patch cables. Click a cable to remove it."></svg><section class="patch-canvas-rack" data-patch-canvas-rack aria-label="Voltage Lab modular synth rack"></section></section>' +
     '<section class="patch-canvas-grid patch-canvas-instrument-grid"><aside class="patch-canvas-controls panel"><h3>Patch selection</h3><p data-patch-canvas-selection>Choose an output socket in the rack.</p><button type="button" data-patch-canvas-clear>Clear selection</button><p class="patch-canvas-boundary">The rack exposes every declared patch point. A module’s standalone detailed controls remain in its Lab until its real runtime has been integrated here.</p></aside>' +
@@ -333,6 +339,8 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
   let voiceControls = normaliseFullSynthVoiceControls({ vcaCv: 0 });
   let localFilterCutoffCv = voiceControls.cutoffCv;
   let runtime = createLiveSignalRuntime();
+  const timing = new PatchCanvasTimingController(performance.now());
+  let timingSnapshot = timing.snapshot();
   let canvasOscillatorSource: BrowserAudioSource | undefined;
   let effectiveOscillatorSource: BrowserAudioSource | undefined;
   let m03ModulationDestination: ModulationDestination = 'pitch';
@@ -345,7 +353,8 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
   let m09OscillatorConnected = false;
   let m09OscillatorModulationVoltage: number | undefined;
   let vcaModulationAttenuverter = 1;
-  let m09AnimationFrame = 0;
+  let liveAnimationFrame = 0;
+
   const baseBrowserSource = () => {
     const output = readOscillatorOutput();
     return canvasOscillatorSource ?? (output ? createBrowserAudioSource(output) : undefined);
@@ -419,13 +428,22 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
       voice?.setControls(voiceControls);
     }
   };
-  const publishEnvelope = (value: number) => {
+  const publishEnvelopeVoltage = (value: number) => {
     const result = publishSignal(runtime, state, {
       sourceEndpointId: 'envelope:envelope', signalType: 'cv', value, observedAt: Date.now(),
     });
     runtime = result.state;
-    message = result.reason;
     applyEffectiveVcaCv();
+  };
+  const sampleTiming = (observedAt = performance.now()) => {
+    timingSnapshot = timing.sample(state, observedAt);
+    publishEnvelopeVoltage(timingSnapshot.m05Voltage);
+    return timingSnapshot;
+  };
+  const reconcileTiming = (observedAt = performance.now()) => {
+    timingSnapshot = timing.reconcilePatch(state, observedAt);
+    publishEnvelopeVoltage(timingSnapshot.m05Voltage);
+    return timingSnapshot;
   };
   const sampleM09 = (observedAt: number) => {
     if (!m09Source) {
@@ -472,24 +490,32 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
     root.querySelectorAll<HTMLElement>('[data-m09-oscillator-connection-state]').forEach((element) => { element.textContent = m09OscillatorConnected ? 'driving M03 modulation' : 'not receiving M09'; });
     root.querySelectorAll<HTMLElement>('[data-m03-effective-modulation]').forEach((element) => { element.textContent = oscillatorModulationLabel(m03ModulationDestination, effectiveOscillatorSource ?? baseBrowserSource()); });
   };
-  const animateM09 = () => {
+  const updateTimingReadouts = () => {
+    root.querySelectorAll<HTMLElement>('[data-m02-beat]').forEach((element) => { element.textContent = String(timingSnapshot.m02Levels.beat); });
+    root.querySelectorAll<HTMLElement>('[data-m02-clock-level]').forEach((element) => { element.textContent = timingSnapshot.m02Levels.clock ? '5 V' : '0 V'; });
+    root.querySelectorAll<HTMLElement>('[data-m02-gate-level]').forEach((element) => { element.textContent = timingSnapshot.m02Levels.gate ? '5 V' : '0 V'; });
+    root.querySelectorAll<HTMLElement>('[data-m02-trigger-level]').forEach((element) => { element.textContent = timingSnapshot.m02Levels.trigger ? '5 V' : '0 V'; });
+    root.querySelectorAll<HTMLElement>('[data-m05-stage]').forEach((element) => { element.textContent = timingSnapshot.m05Stage; });
+    root.querySelectorAll<HTMLElement>('[data-m05-gate-state]').forEach((element) => { element.textContent = timingSnapshot.m05GateHigh ? 'high' : 'low'; });
+    root.querySelectorAll<HTMLElement>('[data-m05-voltage]').forEach((element) => { element.textContent = timingSnapshot.m05Voltage.toFixed(2) + ' V'; });
+    root.querySelectorAll<HTMLElement>('[data-m02-m05-gate-state]').forEach((element) => { element.textContent = timingSnapshot.gateCableConnected ? 'connected' : 'not connected'; });
+    root.querySelectorAll<HTMLElement>('[data-m02-m05-trigger-state]').forEach((element) => { element.textContent = timingSnapshot.triggerCableConnected ? 'connected' : 'not connected'; });
+  };
+  const animateLiveRack = () => {
+    sampleTiming(performance.now());
     sampleM09(Date.now());
+    updateTimingReadouts();
     updateM09Readouts();
-    m09AnimationFrame = window.requestAnimationFrame(animateM09);
+    liveAnimationFrame = window.requestAnimationFrame(animateLiveRack);
   };
   const render = () => {
-    const proposal = createPatchCanvasProposal({
-      sourceEndpointId,
-      destinationEndpointId,
-    });
-    const envelopeValue = observeLiveSignal(runtime, 'envelope:envelope').value ?? 5;
+    const proposal = createPatchCanvasProposal({ sourceEndpointId, destinationEndpointId });
     rack.innerHTML = rackMarkup(
       sourceEndpointId,
       destinationEndpointId,
       rejectedDestinationEndpointId,
       voiceControls,
       localFilterCutoffCv,
-      envelopeValue,
       Boolean(canvasOscillatorSource),
       m09Controls,
       Boolean(m09Source),
@@ -502,56 +528,82 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
       m09OscillatorConnected,
       m09OscillatorModulationVoltage,
       effectiveOscillatorSource ?? baseBrowserSource(),
+      timingSnapshot,
     );
     selection.innerHTML = sourceEndpointId
       ? '<b>Output selected.</b> Choose an input socket. A directly compatible target connects immediately.'
       : (message ? '<b>Patch status:</b> ' + message : 'Choose an output socket in the rack.');
     drawEndpointCables();
     window.requestAnimationFrame(drawEndpointCables);
-    workbench.innerHTML = proposedRouteMarkup(proposal) + connectedCablesMarkup(state) + fullSynthVoiceMarkup(state, runtime, voiceControls, localFilterCutoffCv, browserSource()) + m09ModulationMarkup(state, Boolean(m09Source), m09SourceVoltage, m09CutoffConnected, voiceControls.cutoffCv, m09VcaConnected, m09VcaModulationVoltage, vcaModulationAttenuverter, voiceControls.vcaCv, m09OscillatorConnected, m09OscillatorModulationVoltage, m03ModulationDestination, effectiveOscillatorSource ?? baseBrowserSource()) +
+    workbench.innerHTML = proposedRouteMarkup(proposal) + connectedCablesMarkup(state) + fullSynthVoiceMarkup(state, runtime, voiceControls, localFilterCutoffCv, browserSource()) + timingWorkbenchMarkup(timingSnapshot) + m09ModulationMarkup(state, Boolean(m09Source), m09SourceVoltage, m09CutoffConnected, voiceControls.cutoffCv, m09VcaConnected, m09VcaModulationVoltage, vcaModulationAttenuverter, voiceControls.vcaCv, m09OscillatorConnected, m09OscillatorModulationVoltage, m03ModulationDestination, effectiveOscillatorSource ?? baseBrowserSource()) +
       '<section class="patch-canvas-learning panel"><h3>What this teaches</h3><p>An output is a source and an input is a destination. A solid cable with an arrow means Connection Engine has accepted a directly compatible route.</p><p>' +
-      (message || 'M09 can now fan one real moving CV source to M03, Filter and VCA modulation through independent real cables.') + '</p></section>';
+      (message || 'M02 now drives real event cables into M05, whose real Envelope CV can control the VCA; M09 remains an independent moving-CV source for M03, Filter and VCA modulation.') + '</p></section>';
+    updateTimingReadouts();
     updateM09Readouts();
   };
 
+  const settleBeforePatchMutation = (observedAt = performance.now()) => sampleTiming(observedAt);
   const connect = () => {
     if (!sourceEndpointId || !destinationEndpointId) return;
+    const now = performance.now();
+    settleBeforePatchMutation(now);
     const result = connectPorts(state, sourceEndpointId, destinationEndpointId);
     state = result.state;
+    reconcileTiming(now);
     message = result.reason;
     sampleM09(Date.now());
     render();
   };
   const buildFullVoicePatch = () => {
+    const now = performance.now();
+    settleBeforePatchMutation(now);
     for (const cable of REQUIRED_VOICE_CABLES) {
       const exists = state.connections.some((connection) => connection.sourceEndpointId === cable.sourceEndpointId && connection.destinationEndpointId === cable.destinationEndpointId);
       if (exists) continue;
       const result = connectPorts(state, cable.sourceEndpointId as PortEndpointId, cable.destinationEndpointId as PortEndpointId);
       state = result.state;
-      if (result.status === 'rejected') { message = result.reason; render(); return; }
+      if (result.status === 'rejected') { reconcileTiming(now); message = result.reason; render(); return; }
     }
-    message = planFullSynthVoice(state).ready ? 'The four real cables are connected. The Module 03 voice monitor is ready.' : 'The voice patch could not be completed.';
+    reconcileTiming(now);
+    message = planFullSynthVoice(state).ready ? 'The four real cables are connected. Start patch audio, then a real M02 → M05 timing cable can drive the envelope.' : 'The voice patch could not be completed.';
     publishOscillatorBoundary();
-    publishEnvelope(observeLiveSignal(runtime, 'envelope:envelope').value ?? 5);
     sampleM09(Date.now());
     render();
   };
   const buildM09DestinationPatch = (destination: PortEndpointId, label: string) => {
     if (hasDirectM09Cable(state, destination)) { message = 'The real M09 LFO → ' + label + ' cable is already connected.'; render(); return; }
+    const now = performance.now();
+    settleBeforePatchMutation(now);
     const result = connectPorts(state, M09_SOURCE, destination);
     state = result.state;
+    reconcileTiming(now);
     message = result.status === 'connected'
       ? 'Connected M09 LFO CV to ' + label + '. The moving voltage now matters only through this real cable.'
       : 'M09 ' + label + ' cable was rejected: ' + result.reason;
     sampleM09(Date.now());
     render();
   };
+  const buildM02M05Patch = (source: PortEndpointId, destination: PortEndpointId, label: string) => {
+    const exists = state.connections.some((connection) => connection.sourceEndpointId === source && connection.destinationEndpointId === destination && connection.compatibility.level === 'direct');
+    if (exists) { message = 'The real ' + label + ' cable is already connected.'; render(); return; }
+    const now = performance.now();
+    settleBeforePatchMutation(now);
+    const result = connectPorts(state, source, destination);
+    state = result.state;
+    reconcileTiming(now);
+    message = result.status === 'connected'
+      ? 'Connected ' + label + '. Only events delivered through this real cable can drive that M05 input.'
+      : label + ' cable was rejected: ' + result.reason;
+    render();
+  };
   const stopVoice = () => { const active = voice; voice = undefined; void active?.stop(); };
   const disconnectCable = (connectionId: ConnectionId) => {
+    const now = performance.now();
+    settleBeforePatchMutation(now);
     const result = disconnectPort(state, connectionId);
     state = result.state;
+    reconcileTiming(now);
     if (!planFullSynthVoice(state).ready) stopVoice();
-    publishEnvelope(observeLiveSignal(runtime, 'envelope:envelope').value ?? 5);
     sampleM09(Date.now());
     message = result.reason;
     render();
@@ -559,21 +611,26 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
   const click = (event: Event) => {
     const target = event.target as HTMLElement;
     if (target.closest('[data-build-full-voice]')) { buildFullVoicePatch(); return; }
+    if (target.closest('[data-build-m02-m05-gate]')) { buildM02M05Patch(M02_GATE_SOURCE, M05_GATE_DESTINATION, 'M02 Gate → M05 Gate'); return; }
+    if (target.closest('[data-build-m02-m05-trigger]')) { buildM02M05Patch(M02_TRIGGER_SOURCE, M05_TRIGGER_DESTINATION, 'M02 Trigger → M05 Trigger'); return; }
     if (target.closest('[data-build-m09-filter-patch]')) { buildM09DestinationPatch(M09_FILTER_DESTINATION, 'Filter Cutoff'); return; }
     if (target.closest('[data-build-m09-vca-patch]')) { buildM09DestinationPatch(M09_VCA_DESTINATION, 'VCA modulation'); return; }
     if (target.closest('[data-build-m09-oscillator-patch]')) { buildM09DestinationPatch(M09_OSCILLATOR_DESTINATION, 'M03 modulation'); return; }
     if (target.closest('[data-full-voice-start]')) {
       const source = browserSource();
       if (!planFullSynthVoice(state).ready || !source || voice) return;
-      void BrowserFullSynthVoice.start(voiceControls, source).then((started) => { voice = started; sampleM09(Date.now()); message = 'Module 03 source started through the real cable set and explicit browser boundary.'; render(); });
+      void BrowserFullSynthVoice.start(voiceControls, source).then((started) => {
+        voice = started;
+        started.gate(true);
+        sampleTiming(performance.now());
+        sampleM09(Date.now());
+        message = 'Patch audio started. The safety monitor is open; real Envelope → VCA CV now owns musical loudness.';
+        render();
+      });
       return;
     }
-    if (target.closest('[data-full-voice-note]')) { voice?.gate(true); window.setTimeout(() => voice?.gate(false), 900); return; }
     if (target.closest('[data-full-voice-stop]')) { stopVoice(); message = 'Reference voice stopped.'; render(); return; }
-    if (target.closest('[data-patch-canvas-connect]')) {
-      connect();
-      return;
-    }
+    if (target.closest('[data-patch-canvas-connect]')) { connect(); return; }
     const remove = target.closest<HTMLElement>('[data-patch-canvas-disconnect]');
     if (!remove) return;
     disconnectCable(remove.dataset.patchCanvasDisconnect as ConnectionId);
@@ -590,6 +647,25 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
   };
   const input = (event: Event) => {
     const target = event.target as HTMLInputElement | HTMLSelectElement;
+    const m02Change = m02ControlChange(target);
+    const m05Change = m05ControlChange(target);
+    if (m02Change || m05Change) {
+      const now = performance.now();
+      sampleTiming(now);
+      if (m02Change) timing.updateM02(m02Change, now);
+      if (m05Change) timing.updateM05(m05Change, now);
+      timingSnapshot = timing.snapshot();
+      publishEnvelopeVoltage(timingSnapshot.m05Voltage);
+      const readout = target instanceof HTMLInputElement ? target.parentElement?.querySelector('output') : undefined;
+      if (readout && target.matches('[data-m02-bpm]')) readout.value = Math.round(Number(target.value)) + ' BPM';
+      if (readout && target.matches('[data-m02-pulse-width]')) readout.value = Math.round(Number(target.value) * 100) + '%';
+      if (readout && target.matches('[data-m02-swing]')) readout.value = Math.round(Number(target.value) * 100) + '%';
+      if (readout && target.matches('[data-m05-attack], [data-m05-decay], [data-m05-release], [data-m05-trigger-length]')) readout.value = Math.round(Number(target.value)) + ' ms';
+      if (readout && target.matches('[data-m05-sustain]')) readout.value = Math.round(Number(target.value) * 100) + '%';
+      updateTimingReadouts();
+      return;
+    }
+
     if (target.matches('[data-full-voice-waveform]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, waveform: target.value as FullSynthVoiceControls['waveform'] });
     if (target.matches('[data-full-voice-pitch]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, pitchCv: Number(target.value) });
     if (target.matches('[data-full-voice-amplitude]')) voiceControls = normaliseFullSynthVoiceControls({ ...voiceControls, sourceAmplitudeVolts: Number(target.value) });
@@ -604,7 +680,6 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
       vcaModulationAttenuverter = Math.max(-1, Math.min(1, Number(target.value)));
       applyEffectiveVcaCv();
     }
-    if (target.matches('[data-live-envelope-cv]')) { publishEnvelope(Number(target.value)); render(); return; }
     const m09Change = updateM09ControlFromInput(target);
     if (m09Change) {
       m09Controls = normaliseM09PatchSourceControls({ ...m09Controls, ...m09Change });
@@ -638,6 +713,26 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
 
   const selectSocket = (event: Event) => {
     const target = event.target as HTMLElement;
+    if (target.closest('[data-m02-reset]')) {
+      const now = performance.now();
+      sampleTiming(now);
+      timing.resetM02(now);
+      timingSnapshot = timing.snapshot();
+      publishEnvelopeVoltage(timingSnapshot.m05Voltage);
+      message = 'M02 clock phase reset. The new shared timing origin is explicit.';
+      render();
+      return;
+    }
+    if (target.closest('[data-m05-reset]')) {
+      const now = performance.now();
+      sampleTiming(now);
+      timing.resetM05(now);
+      timingSnapshot = timing.snapshot();
+      publishEnvelopeVoltage(timingSnapshot.m05Voltage);
+      message = 'M05 envelope reset to 0 V.';
+      render();
+      return;
+    }
     if (target.closest('[data-full-voice-publish-source]')) {
       canvasOscillatorSource = canvasSourceFromControls();
       sampleM09(Date.now());
@@ -680,8 +775,11 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
       render();
       return;
     }
+    const now = performance.now();
+    settleBeforePatchMutation(now);
     const result = connectPorts(state, sourceEndpointId, attemptedDestination);
     state = result.state;
+    reconcileTiming(now);
     rejectedDestinationEndpointId = result.status === 'rejected' ? attemptedDestination : undefined;
     message = result.status === 'connected'
       ? 'Connected. The cable now runs from the output jack to the input jack; its arrow shows signal direction. Click the cable or use Remove in the cable list to disconnect it.'
@@ -724,10 +822,10 @@ export function mountPatchCanvas(root: HTMLElement): () => void {
   workbench.addEventListener('input', input);
   workbench.addEventListener('change', input);
   render();
-  m09AnimationFrame = window.requestAnimationFrame(animateM09);
+  liveAnimationFrame = window.requestAnimationFrame(animateLiveRack);
   return () => {
     rackResizeObserver.disconnect();
-    window.cancelAnimationFrame(m09AnimationFrame);
+    window.cancelAnimationFrame(liveAnimationFrame);
     rack.removeEventListener('click', selectSocket);
     cableLayer.removeEventListener('click', disconnectCableAtTarget);
     cableLayer.removeEventListener('keydown', disconnectCableWithKeyboard);
