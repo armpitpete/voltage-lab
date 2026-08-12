@@ -32,6 +32,8 @@ export type M09DestinationSample = {
   filterConnected: boolean;
   vcaModulationCv: number | undefined;
   vcaConnected: boolean;
+  oscillatorModulationCv: number | undefined;
+  oscillatorConnected: boolean;
 };
 
 export type M09FilterCutoffSample = {
@@ -144,6 +146,7 @@ export function sampleM09Destinations(
   const sourceVoltage = observeLiveSignal(nextRuntime, 'lfo-modulation:lfo').value;
   const filterDelivery = observeLiveSignal(nextRuntime, 'filter:cutoff').value;
   const vcaDelivery = observeLiveSignal(nextRuntime, 'vca-mixer:modulation').value;
+  const oscillatorDelivery = observeLiveSignal(nextRuntime, 'oscillator:modulation').value;
   return {
     runtime: nextRuntime,
     sourceVoltage,
@@ -151,6 +154,8 @@ export function sampleM09Destinations(
     filterConnected: filterDelivery !== undefined,
     vcaModulationCv: vcaDelivery,
     vcaConnected: vcaDelivery !== undefined,
+    oscillatorModulationCv: oscillatorDelivery,
+    oscillatorConnected: oscillatorDelivery !== undefined,
   };
 }
 
