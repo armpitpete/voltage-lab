@@ -1,5 +1,6 @@
 import '../../../packages/ui/src/tokens.css';
 import './styles.css';
+import './patch-canvas-interaction.css';
 import './filter.css';
 import './vca-mixer.css';
 import './lfo-modulation.css';
