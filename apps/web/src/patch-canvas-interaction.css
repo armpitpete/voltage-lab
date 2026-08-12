@@ -8,3 +8,11 @@
 .patch-rack-cable {
   pointer-events: stroke;
 }
+
+/* Patch Canvas models powered source modules. Their existing source actions are
+   invoked once at mount by patch-canvas-live-sources.ts, so exposing duplicate
+   manual activation buttons would add friction without adding signal safety. */
+[data-full-voice-publish-source],
+[data-m09-publish-source] {
+  display: none;
+}
